@@ -4,9 +4,11 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 import pyparsing as pp
 
+from parser import Attr
+
 
 class OutputFormat(Enum):
-    TEXT = "TEXT"
+    TEXT = "text"
     MASSEUR = "masseur"
     JSON = "json"
 
@@ -33,7 +35,7 @@ class Message:
         }[fmt]()
 
     @classmethod
-    def from_node(_, message_id, message, node, ast) -> 'Message':
+    def from_node(_, message_id, message, node) -> 'Message':
         """Create a `Message`, pulling location info from `node` and `ast`
 
         Args:
@@ -48,9 +50,9 @@ class Message:
         return Message(
             message_id=message_id,
             message=message,
-            path=ast["<meta>"]["path"],
-            line=node["ln"],
-            column=node["col"]
+            path=node[Attr.PATH],
+            line=node[Attr.LN],
+            column=node[Attr.COL]
         )
 
     @classmethod
@@ -74,10 +76,6 @@ class Message:
             ex.lineno,
             ex.col
         )
-
-
-class FatalException(Exception):
-    """Exception wrapping a `Message`."""
 
 
 def j_dump(x):

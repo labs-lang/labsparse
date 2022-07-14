@@ -1,6 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, wait
-import os
-from parser import kw
+from parser import Attr, NodeType, kw
 from typing import List
 from itertools import combinations
 
@@ -11,7 +10,7 @@ def walk(d):
     """Return all AST nodes in d as an iterable.
     """
     if isinstance(d, dict):
-        if "ast-type" in d:
+        if Attr.NODE_TYPE in d:
             yield d
         for val in d.values():
             if isinstance(val, list):
@@ -38,14 +37,14 @@ def check_assign(ast: dict) -> List[Message]:
                 result.append(Message.from_node(
                     message_id="E001",
                     message="Cannot assign to 'id'",
-                    node=var, ast=ast))
+                    node=var))
         if len(node["lhs"]) != len(node["rhs"]):
             result.append(Message.from_node(
                 message_id="E002",
                 message=(
                     "Invalid number of expressions "
                     f'(expected {len(node["lhs"])}, got {len(node["rhs"])})'),
-                node=node, ast=ast))
+                node=node))
         if len(node["lhs"]) > 1:
             for v1, v2 in combinations(node["lhs"], 2):
                 if v1["name"] == v2["name"]:
@@ -54,9 +53,9 @@ def check_assign(ast: dict) -> List[Message]:
                         message=(
                             f"Variable '{v1['name']}' "
                             "assigned multiple times"),
-                        node=v2, ast=ast))
+                        node=v2))
 
-    return check(ast, lambda n: n["ast-type"].startswith("assign"), body)
+    return check(ast, lambda n: n in NodeType.ASSIGN, body)
 
 
 def check_ref(ast: dict) -> List[Message]:
@@ -68,7 +67,7 @@ def check_ref(ast: dict) -> List[Message]:
                 node=n, ast=ast
             ))
 
-    return check(ast, lambda n: n["ast-type"].startswith("ref"), body)
+    return check(ast, lambda n: n[Attr.NODE_TYPE].startswith("ref"), body)
 
 
 def check_spawn(ast: dict) -> List[Message]:
@@ -92,35 +91,34 @@ def check_externs(ast: dict) -> List[Message]:
             result.append(Message.from_node(
                 message_id="E006",
                 message=f"Undefined extern '{n['name']}'",
-                node=n, ast=ast))
-    return check(ast, lambda n: n["ast-type"] == "ext", body)
+                node=n))
+    return check(ast, lambda n: n[Attr.NODE_TYPE] == "ext", body)
 
 
 def check_builtins(ast: dict) -> List[Message]:
     arities = {
         "abs": 1,
         "max": 2,
-        "min": 2
+        "min": 2,
+        "unary-minus": 1
     }
 
-    def body(n, ast, result):
-        try:
-            expected, got = arities[n["fn"]], len(n["args"])
-            if expected != got:
-                where = n
-                if expected < got:
-                    where = n["args"][expected]
-                elif got > 0:
-                    where = n["args"][-1]
-                result.append(Message.from_node(
-                    message_id="E007",
-                    message=(
-                        f"Wrong arity for '{n['fn']}' "
-                        f"(expected {expected}, got {got})"),
-                    node=where, ast=ast))
-        except KeyError:
-            pass
-    return check(ast, lambda n: n["ast-type"] == "builtin", body)
+    def body(n, _, result):
+        expected = arities[n[Attr.NAME]]
+        got = len(n.get(Attr.OPERANDS, []))
+        if expected != got:
+            where = n
+            if expected < got:
+                where = n[Attr.OPERANDS][expected]
+            elif got > 0:
+                where = n[Attr.OPERANDS][-1]
+            result.append(Message.from_node(
+                message_id="E007",
+                message=(
+                    f"Wrong arity for '{n[Attr.NAME]}' "
+                    f"(expected {expected}, got {got})"),
+                node=where))
+    return check(ast, lambda n: n in NodeType.BUILTIN, body)
 
 
 def run(ast: dict) -> List[Message]:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from curses.ascii import DEL
+from enum import Enum, auto, unique
+
 import pyparsing as pp
 from pyparsing import (Combine, FollowedBy, Forward, Group, Keyword, Literal,
                        OneOrMore, Optional, ParserElement, Suppress, Word,
@@ -9,10 +10,76 @@ from pyparsing import (Combine, FollowedBy, Forward, Group, Keyword, Literal,
 from pyparsing import pyparsing_common as ppc
 from pyparsing import pythonStyleComment, ungroup
 
-from message import FatalException, Message
 
 ParserElement.enablePackrat()
-# sys.tracebacklimit = 0
+
+_path = ""
+
+
+class StringEnum(str, Enum):
+    def _generate_next_value_(name, *_):
+        return name.lower().replace("_", "-")
+
+    def __repr__(self) -> str:
+        return f"'{self.value}'"
+
+    # def __eq__(self, __o: object) -> bool:
+    #     return isinstance(__o, StringEnum) and super().__eq__(__o)
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+
+@unique
+class Attr(StringEnum):
+    """Attribute names of AST nodes.
+
+    The str inheritance is needed for JSON serialization
+    """
+    NODE_TYPE = auto()
+    LN = auto()
+    COL = auto()
+    PATH = auto()
+    NAME = auto()
+    BODY = auto()           # block, procdef
+    PROCDEFS = auto()       # system, agent
+    OPERANDS = auto()       # arithmetic, composition
+    CONDITION = auto()      # if, guarded
+    LOCATION = auto()       # assignment
+    LHS = auto()            # assignment, comparison
+    RHS = auto()            # assignment, comparison
+    THEN = auto()           # if
+    ELSE = auto()           # if
+    OF = auto()             # ref
+    OFFSET = auto()         # ref
+    QUANTIFIER = auto()     # qvar
+    SYNTHETIC = auto()      # (Used to mark synthetised nodes)
+    TYPE = auto()           # literal
+    VALUE = auto()          # literal
+
+
+@unique
+class NodeType(StringEnum):
+    AGENT = auto()
+    ASSIGN = auto()
+    BLOCK = auto()
+    BUILTIN = auto()
+    COMPARISON = auto()
+    COMPOSITION = auto()
+    EXPR = auto()
+    GUARDED = auto()
+    IF = auto()
+    LITERAL = auto()
+    PROCDEF = auto()
+    RAW_CALL = auto()
+    REF = auto()
+    REF_LINK = auto()
+
+    def __contains__(self, __o: str) -> bool:
+        return all((
+            isinstance(__o, dict),
+            Attr.NODE_TYPE in __o,
+            __o[Attr.NODE_TYPE] == self))
 
 
 def oneOfKw(lst):
@@ -24,7 +91,6 @@ LBRACE, \
     SEMICOLON, COMMA, LPAR, RPAR, RAWPREFIX = map(Suppress, "{}[]=:;,()$")
 
 kw = "and or not true false forall exists pick where if then else"
-# kws_lower = oneOfKw(kw)
 BUILTIN = oneOfKw("abs mix max")
 QUANTIFIER = oneOfKw("forall exists")
 MODALITY = oneOfKw("always eventually fairly fairly_inf finally")
@@ -32,64 +98,77 @@ kws_upper = oneOfKw("Skip Nil")
 
 
 def make_node(s, loc, toks):
+    _t = toks.asDict()
     try:
         ast_type = toks.getName() or toks[0][1]
     except KeyError:
         return toks[0]
+
     if isinstance(ast_type, dict) and toks[0][0] == "-":
-        ast_type = "unary-minus"
+        _t[Attr.NAME] = "unary-minus"
+        _t[Attr.OPERANDS] = [toks[0][1]]
+        ast_type = NodeType.BUILTIN
+    elif ast_type in ("seq", "choice", "par"):
+        _t[Attr.NAME] = ast_type
+        ast_type = NodeType.COMPOSITION
+    elif ast_type in "+-*/%:" or ast_type in ("and", "or"):
+        _t[Attr.NAME] = ast_type
+        ast_type = NodeType.EXPR
+    elif ast_type.startswith("literal-"):
+        _t[Attr.TYPE] = ast_type.split("-")[-1]
+        fn = {"int": int, "bool": bool}.get(_t[Attr.TYPE], lambda x: x)
+        _t[Attr.VALUE] = fn(toks[ast_type])
+        ast_type = NodeType.LITERAL
 
     node = {
-        "ast-type": ast_type,
-        "ln": pp.lineno(loc, s),
-        "col": pp.col(loc, s)
+        Attr.NODE_TYPE: ast_type,
+        Attr.LN: pp.lineno(loc, s),
+        Attr.COL: pp.col(loc, s),
+        Attr.PATH: _path
     }
 
     def add(*args):
-        node.update({x: getattr(toks, x) for x in args if x in toks})
+        node.update({x: _t[x] for x in args if x in _t})
 
     def remove(*args):
         for x in (a for a in args if a in node):
             del node[x]
 
     to_add = {
-        "agent": ("interface", "name", "processes"),
+        "agent": ("interface", Attr.PROCDEFS),
+        NodeType.ASSIGN: (Attr.LOCATION, Attr.LHS, Attr.RHS),
         "assume": ("assumptions",),
-        "assumption": ("name", "quant"),
-        "block": ("block",),
-        "builtin": ("fn", "args"),
+        "assumption": ("quant",),
+        NodeType.BLOCK: (Attr.BODY,),
+        NodeType.BUILTIN: (Attr.OPERANDS,),
         "check": ("properties",),
-        "choice": ("choice",),
-        "comparison": ("e1", "e2"),
+        NodeType.COMPARISON: (Attr.LHS, Attr.RHS),
         "decl": ("var", "init-value", "init-range", "init-list"),
-        "guarded": ("guard", "process"),
-        "if": ("condition", "then", "else"),
-        "par": ("par",),
-        "procdef": ("name", "body"),
-        "property": ("name", "modality", "quant"),
+        NodeType.GUARDED: (Attr.CONDITION, Attr.BODY),
+        NodeType.IF: (Attr.CONDITION, Attr.THEN, Attr.ELSE),
+        NodeType.LITERAL: (Attr.TYPE, Attr.VALUE),
+        "property": ("modality", "quant"),
         "quant": ("qvars", "formula"),
-        "qvar": ("name", "type", "quantifier"),
-        "raw": ("fn", "args"),
-        "ref": ("of", "offset"),
-        "seq": ("seq",),
+        "qvar": (Attr.TYPE, Attr.QUANTIFIER),
+        NodeType.RAW_CALL: (Attr.OPERANDS),
+        NodeType.REF: (Attr.OF, Attr.OFFSET),
+        NodeType.REF_LINK: (Attr.OF, Attr.OFFSET),
         "spawn-expression": ("num",),
         "spawn": ("spawn",),
         "stigmergy": ("link", "tuples"),
-        "system": ("extern", "spawn", "processes"),
+        "system": ("extern", "spawn", Attr.PROCDEFS),
     }
     to_remove = {
-        "extern": ("name",),
-        "spawn": ("name",)
+        "extern": (Attr.NAME,),
+        "spawn": (Attr.NAME,)
     }
 
-    add("name", *to_add.get(ast_type, []))
+    add(Attr.NAME, *to_add.get(ast_type, []))
     remove(*to_remove.get(ast_type, []))
-    if ast_type.startswith("assign-"):
-        add("lhs", "rhs")
 
     for field in (
-        "processes", "tuples", "spawn", "extern", "block",
-        "lhs", "rhs", "args", "qvars", "operands",
+        Attr.OPERANDS, "tuples", "spawn", "extern", Attr.BODY,
+        Attr.LHS, Attr.RHS, Attr.OPERANDS, "qvars", Attr.PROCDEFS,
         "assumptions", "properties"
     ):
         if field in node:
@@ -97,51 +176,39 @@ def make_node(s, loc, toks):
                 node[field] = node[field].asList()
             elif node[field] == "":
                 node[field] = []
-    if "name" in node and hasattr(node["name"], "asList"):
-        node["name"] = node["name"][0]
+    if Attr.NAME in node and hasattr(node[Attr.NAME], "asList"):
+        node[Attr.NAME] = node[Attr.NAME][0]
 
     projections = {
-        "extern": lambda t: {"extern": t.asList()},
-        "spawn": lambda t: {"spawn": t.asList()},
-        "interface": lambda t: {"interface": t.asList()},
-        "values": lambda t: {"values": t.asList()},
+        "array": lambda t: {Attr.NAME: t[ast_type]},
+        "call": lambda t: {Attr.NAME: t[0]},
+        "composition": lambda _: {Attr.OPERANDS: _t[_t[Attr.NAME]]},
         "decl": lambda t: {"init": t[1]},
-        "ext": lambda t: {"name": t[0]},
-        "unary-minus": lambda t: {"operand": t[0][1]},
+        "expr": lambda _: {Attr.OPERANDS: toks[0][0::2]},
+        "ext": lambda t: {Attr.NAME: t[0]},
+        "extern": lambda t: {"extern": t.asList()},
         "init-range": lambda t: {"start": t[0], "bound": t[1]},
-        "scalar": lambda t: {"name": t[ast_type]},
-        "array": lambda t: {"name": t[ast_type]},
-        "comparison": lambda t: {"ast-type": t.op},
-        "procdef": lambda _: {"body": simplify(node["body"][0])},
-        "and": lambda _: {"operands": toks[0][0::2]},
-        "or": lambda _: {"operands": toks[0][0::2]},
         "init-value": lambda _: {"value": toks["init-value"]},
+        "interface": lambda t: {"interface": t.asList()},
+        "procdef": lambda t: {Attr.BODY: t[Attr.BODY].asList()[0]},
+        "scalar": lambda t: {Attr.NAME: t[ast_type]},
+        "spawn": lambda t: {"spawn": t.asList()},
+        "values": lambda t: {"values": t.asList()},
     }
 
     if ast_type in projections:
         node.update(projections[ast_type](toks))
-
-    # -------------------------------------------------------------------------
-    elif ast_type in "+-*/%:":
-        node["operands"] = toks[0][0::2]
-    elif ast_type.startswith("literal-"):
-        node["ast-type"], node["type"] = ast_type.split("-")
-        fn = {"int": int, "bool": bool}
-        node["value"] = fn.get(node["type"], lambda x: x)(toks[ast_type])
-    elif ast_type.startswith("ref"):
-        if "offset" in node:
-            node["offset"] = node["offset"][0]
-        # validate_ref(node)
-        if "of" in node:
-            node["of"] = node["of"][0]
-    # -------------------------------------------------------------------------
-
+    elif ast_type in (NodeType.REF, NodeType.REF_LINK):
+        if Attr.OFFSET in node:
+            node[Attr.OFFSET] = node[Attr.OFFSET][0]
+        if Attr.OF in node:
+            node[Attr.OF] = node[Attr.OF][0]
     return node
 
 
 VARNAME = Word(alphas.lower(), alphanums + "_")
 IDENTIFIER = Word(alphas.upper(), alphanums + "_")
-EXTERN = Combine(Literal("_") + VARNAME)("name").setParseAction(lambda t: t[0])
+EXTERN = Combine(Literal("_") + VARNAME)(Attr.NAME).setParseAction(lambda t: t[0])  # noqa: E501
 
 
 def named_list(name, thing, sep=SEMICOLON):
@@ -156,50 +223,53 @@ def offset(pexpr):
 
 def baseVarRefParser(pexpr):
     return (
-        VARNAME("name") +
+        VARNAME(Attr.NAME) +
         Optional(
-            offset(pexpr)("offset") ^
+            offset(pexpr)(Attr.OFFSET) ^
             (LBRACK + RBRACK).setParseAction(lambda _: True)("array")
         ) +
-        Optional(Keyword("of").suppress() + pexpr)("of")
-    )("ref")
+        Optional(Keyword("of").suppress() + pexpr)(Attr.OF)
+    )(NodeType.REF)
 
 
 def linkVarRefParser(pexpr):
     return (
-        VARNAME("name") +
-        Optional(offset(pexpr))("offset") +
-        (Keyword("of").suppress() + oneOfKw("1 2 c1 c2"))("of")
+        VARNAME(Attr.NAME) +
+        Optional(offset(pexpr))(Attr.OFFSET) +
+        (Keyword(Attr.OF).suppress() + oneOfKw("1 2 c1 c2"))(Attr.OF)
     )("ref-link")
 
 
 def makeExprParsers(pvarrefMaker):
-    EXPR = Forward()
-    BEXPR = Forward()
-    QUANT = Forward()
-    VARREF = pvarrefMaker(EXPR)
+    expr = Forward()
+    bexpr = Forward()
+    quant = Forward()
+    var_ref = pvarrefMaker(expr)
 
-    FUNCTIONNAME = Word(alphas + "_", alphanums + "_")
-    RAWCALL = (
-        Combine(RAWPREFIX + FUNCTIONNAME + LPAR)("fn")
-        + Optional(delimitedList(EXPR))("args")
+    raw_fn_name = Word(alphas + "_", alphanums + "_")
+    raw_fn_call = (
+        Combine(RAWPREFIX + raw_fn_name + LPAR)(Attr.NAME)
+        + Optional(delimitedList(expr))(Attr.OPERANDS)
         + RPAR
     )
 
-    EXPRATOM = (
+    expr_atom = (
         (
-            Keyword("if").suppress() + BEXPR("condition") +
-            Keyword("then").suppress() + EXPR("then") +
-            Keyword("else").suppress() + EXPR("else")
-        )("if") |
+            Keyword("if").suppress() + bexpr(Attr.CONDITION) +
+            Keyword("then").suppress() + expr(Attr.THEN) +
+            Keyword("else").suppress() + expr(Attr.ELSE)
+        )(NodeType.IF) |
         ppc.signed_integer("literal-int") |
-        RAWCALL("raw") |
-        (BUILTIN("fn") + LPAR + delimitedList(EXPR)("args") + RPAR)("builtin") |  # noqa: E501
-        VARREF |
+        raw_fn_call(NodeType.RAW_CALL) |
+        (
+            BUILTIN(Attr.NAME) + LPAR +
+            Optional(delimitedList(expr)(Attr.OPERANDS)) + RPAR
+        )(NodeType.BUILTIN) |  # noqa: E501
+        var_ref |
         EXTERN("ext")
     ).setParseAction(make_node)
 
-    EXPR <<= infixNotation(EXPRATOM, [
+    expr <<= infixNotation(expr_atom, [
         ("-", 1, opAssoc.RIGHT, make_node),
         ("%", 2, opAssoc.LEFT, make_node),
         ("*", 2, opAssoc.LEFT, make_node),
@@ -208,29 +278,29 @@ def makeExprParsers(pvarrefMaker):
         ("+", 2, opAssoc.LEFT, make_node),
         ("-", 2, opAssoc.LEFT, make_node)])
 
-    BEXPRATOM = (
+    bexpr_atom = (
         oneOfKw("true false")("literal-bool") |
-        (EXPR("e1") + oneOf("> < = >= <= !=")("op") + EXPR("e2"))("comparison") ^  # noqa: E501
-        EXPR
+        (expr(Attr.LHS) + oneOf("> < = >= <= !=")(Attr.NAME) + expr(Attr.RHS))(NodeType.COMPARISON) ^  # noqa: E501
+        expr
     ).setParseAction(make_node)
 
-    BEXPR <<= infixNotation(BEXPRATOM, [
+    bexpr <<= infixNotation(bexpr_atom, [
         (Keyword("and"), 2, opAssoc.LEFT, make_node),
         (Keyword("or"), 2, opAssoc.LEFT, make_node)
         ])
 
-    QVAR = (
+    quant_var = (
         FollowedBy(QUANTIFIER) +
-        QUANTIFIER("quantifier") -
-        IDENTIFIER("type") -
-        VARNAME("name")
+        QUANTIFIER(Attr.QUANTIFIER) -
+        IDENTIFIER(Attr.TYPE) -
+        VARNAME(Attr.NAME)
     )("qvar").setParseAction(make_node)
 
-    QUANT <<= (
-        delimitedList(QVAR)("qvars") - COMMA - BEXPR("formula")
+    quant <<= (
+        delimitedList(quant_var)("qvars") - COMMA - bexpr("formula")
     )("quant").setParseAction(make_node)
 
-    return EXPR, BEXPR, QUANT
+    return expr, bexpr, quant
 
 
 EXPR, BEXPR, QUANT = makeExprParsers(baseVarRefParser)
@@ -251,56 +321,65 @@ PICK = (
     pp.Optional(Keyword("where").suppress() + LINKBEXPR)
 )("pick").setParseAction(make_node)
 
-LHS = (VARREF)("ref").setParseAction(make_node)
-RHS = (  
+LHS = (VARREF)(NodeType.REF).setParseAction(make_node)
+RHS = (
     (pp.FollowedBy(QUANTIFIER) + QUANT)("quant") |
     PICK |
     ungroup(EXPR)
 ).setName("rhs expression")
 
+ASSIGN_OP = (
+    Literal("<--").setParseAction(lambda _: "environment") |
+    Literal("<~").setParseAction(lambda _: "stigmergy") |
+    Literal("<-").setParseAction(lambda _: "interface") |
+    Literal(":=").setParseAction(lambda _: "local")
+).setName("assignment operator")
 
-ASSIGN = (
+
+ASSIGN = ungroup(
     (
-        delimitedList(LHS)("lhs") +
-        Suppress("<--") +
-        delimitedList(RHS)("rhs")
-    )("assign-env") |
-    (
-        delimitedList(VARREF)("lhs") +
-        Suppress("<~") +
-        delimitedList(RHS)("rhs")
-    )("assign-lstig") |
-    (
-        delimitedList(LHS)("lhs") +
-        Suppress("<-") +
-        delimitedList(RHS)("rhs")
-    )("assign-attr")
+        delimitedList(LHS)(Attr.LHS) +
+        ASSIGN_OP(Attr.LOCATION) +
+        # Literal("<--").setParseAction(lambda _: "environment")(Attr.LOCATION) +
+        delimitedList(RHS)(Attr.RHS)
+    )(NodeType.ASSIGN)
+    # |
+    # (
+    #     delimitedList(VARREF)(Attr.LHS) +
+    #     Suppress("<~")(Attr.LOCATION).setParseAction(lambda _: "stigmergy") +
+    #     delimitedList(RHS)(Attr.RHS)
+    # )("assign") |
+    # (
+    #     delimitedList(LHS)(Attr.LHS) +
+    #     Literal("<-")(Attr.LOCATION).setParseAction(lambda _: "interface") +
+    #     delimitedList(RHS)(Attr.RHS)
+    # )("assign")
 ).setParseAction(make_node)
 
 
-ASSIGN_BLOCK = (
-    ASSIGN |
-    (
-        delimitedList(LHS)("lhs") +
-        Suppress(":=") +
-        delimitedList(RHS)("rhs")
-    )("assign-local").setParseAction(make_node)
-)
+# ASSIGN_BLOCK = (
+#     ASSIGN |
+#     (
+#         delimitedList(LHS)(Attr.LHS) +
+#         Suppress(":=") +
+#         delimitedList(RHS)(Attr.RHS)
+#     )("assign").setParseAction(make_node)
+# )
 
 PROC = Forward()
 PROCBASE = (
     (
-        FollowedBy(BEXPR) + BEXPR("guard") + Suppress("->") +
-        PROC("process")
-    )("guarded") |
+        FollowedBy(BEXPR) + BEXPR(Attr.CONDITION) + Suppress("->") +
+        PROC(Attr.BODY)
+    )(NodeType.GUARDED) |
     Keyword("Skip")("Skip") |
     IDENTIFIER("call") |
     ASSIGN |
     (
         LBRACE -
-        delimitedList(ASSIGN_BLOCK, SEMICOLON) +
+        delimitedList(ASSIGN, SEMICOLON)(Attr.BODY) +
         RBRACE
-    )("block")
+    )(NodeType.BLOCK)
 ).setParseAction(make_node)
 
 PAREN = (LPAR + PROC + RPAR)("paren")
@@ -309,8 +388,8 @@ CHOICE = delimitedList(SEQ, Literal("++"))("choice").setParseAction(make_node)
 PROC <<= delimitedList(CHOICE, Literal("||"))("par").setParseAction(make_node)
 
 PROCDEF = (
-    IDENTIFIER("name") + EQ + PROC("body")
-)("procdef").setParseAction(make_node)
+    IDENTIFIER(Attr.NAME) + EQ + PROC(Attr.BODY)
+)(NodeType.PROCDEF).setParseAction(make_node)
 
 DECLARATION = (
     LHS("var") + COLON + INITIALIZER
@@ -322,10 +401,10 @@ SYSTEM = (
         Optional(named_list("environment", DECLARATION)) &
         Optional(named_list(
             "spawn",
-            (IDENTIFIER("name") + COLON + EXPR("num"))("spawn-expression"),
+            (IDENTIFIER(Attr.NAME) + COLON + EXPR("num"))("spawn-expression"),
             COMMA
         ))) +
-    ZeroOrMore(PROCDEF)("processes") +
+    ZeroOrMore(PROCDEF)(Attr.OPERANDS) +
     RBRACE
 ).setParseAction(make_node)
 
@@ -335,7 +414,7 @@ TUPLEDEF = (
 ).setParseAction(lambda toks: list(zip(toks[0], toks[1])))
 
 STIGMERGY = (
-    Keyword("stigmergy").suppress() + IDENTIFIER("name") +
+    Keyword("stigmergy").suppress() + IDENTIFIER(Attr.NAME) +
     LBRACE +
     Keyword("link").suppress() + EQ + LINKBEXPR("link") +
     ZeroOrMore(Group(TUPLEDEF))("tuples") +
@@ -344,11 +423,11 @@ STIGMERGY = (
 )("stigmergy").setParseAction(make_node)
 
 AGENT = (
-    Keyword("agent").suppress() + IDENTIFIER("name") +
+    Keyword("agent").suppress() + IDENTIFIER(Attr.NAME) +
     LBRACE + (
         Optional(named_list("interface", DECLARATION))  # noqa: E501
         & Optional(named_list("stigmergies", IDENTIFIER))) +
-    OneOrMore(PROCDEF)("processes") +
+    ZeroOrMore(PROCDEF)(Attr.PROCDEFS) +
     RBRACE
 )("agent").setParseAction(make_node)
 
@@ -356,7 +435,7 @@ ASSUME = (
     Keyword("assume").suppress() + LBRACE +
     # SkipTo(RBRACE) +
     ZeroOrMore((
-        IDENTIFIER("name") + EQ + QUANT("quant")
+        IDENTIFIER(Attr.NAME) + EQ + QUANT("quant")
     )("assumption"))("assumptions") +
     RBRACE
 ).setParseAction(make_node)
@@ -364,7 +443,7 @@ ASSUME = (
 CHECK = (
     Keyword("check").suppress() + LBRACE +
     ZeroOrMore((
-        IDENTIFIER("name") + EQ +
+        IDENTIFIER(Attr.NAME) + EQ +
         MODALITY("modality") + QUANT("quant")
         )("property").setParseAction(make_node)
     )("properties") +
@@ -380,42 +459,15 @@ FILE = (
 ).ignore(pythonStyleComment)
 
 
-def simplify(proc):
-    """Simplifies a LAbS process tree"""
-    if isinstance(proc, dict):
-        if proc["ast-type"] in ("seq", "choice", "par"):
-            if len(proc[proc["ast-type"]]) == 1:
-                return simplify(proc[proc["ast-type"]][0])
-            else:
-                # x = {**proc}
-                x = proc
-                x[x["ast-type"]] = [
-                    simplify(p)
-                    for p in x[x["ast-type"]]
-                ]
-                return x
-        elif proc["ast-type"] == "guarded":
-            proc["process"] = simplify(proc["process"])
-            return proc
-        else:
-            return proc
-    else:
-        return proc
-
-
 def parse_to_dict(path) -> dict:
-    try:
-        with open(path) as fp:
-            p = FILE.parseFile(fp, parseAll=True)
-        return {
-            "<meta>": {
-                "path": path,
-            },
-            "system": p.system,
-            "agents": p.agents.asList(),
-            "stigmergies": p.stigmergies or [],
-            "assume": p.assume or [],
-            "check": p.check or []
-        }
-    except pp.ParseBaseException as e:
-        raise FatalException(Message.wrap_exception(e, path))
+    global _path
+    _path = str(path)
+    with open(path) as fp:
+        p = FILE.parseFile(fp, parseAll=True)
+    return {
+        "system": p.system,
+        "agents": p.agents.asList(),
+        "stigmergies": p.stigmergies or [],
+        "assume": p.assume or [],
+        "check": p.check or []
+    }

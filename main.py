@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import pprint
+from optimizer import optimize
 from parser import parse_to_dict
 from pathlib import Path
 from sys import stderr
@@ -9,7 +10,8 @@ from typing import Optional
 import typer
 
 from checker import run
-from message import FatalException, OutputFormat, j_dump, print_many
+from pyparsing import ParseBaseException
+from message import Message, OutputFormat, j_dump, print_many
 
 
 def print_version(flag):
@@ -43,9 +45,10 @@ def main(
     messages = []
     try:
         ast = parse_to_dict(path)
-    except FatalException as e:
+        optimize(ast)
+    except ParseBaseException as e:
         print("[FATAL] parsing failed", file=stderr)
-        messages = e.args
+        messages = [Message.wrap_exception(e, path)]
     else:
         if dump_ast:
             dump_fn = {
