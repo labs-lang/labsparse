@@ -26,6 +26,12 @@ class StringEnum(str, Enum):
     def __hash__(self) -> int:
         return super().__hash__()
 
+    def __contains__(self, __o: str) -> bool:
+        try:
+            return __o[Attr.NODE_TYPE] == self
+        except (KeyError, TypeError):
+            return False
+
 
 @unique
 class Attr(StringEnum):
@@ -38,6 +44,7 @@ class Attr(StringEnum):
     COL = auto()
     PATH = auto()
     NAME = auto()
+    SYNTHETIC = auto()
 
     BODY = auto()           # block, procdef
     PROCDEFS = auto()       # system, agent
