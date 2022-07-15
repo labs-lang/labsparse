@@ -41,21 +41,25 @@ class Attr(StringEnum):
     COL = auto()
     PATH = auto()
     NAME = auto()
+
     BODY = auto()           # block, procdef
     PROCDEFS = auto()       # system, agent
     OPERANDS = auto()       # arithmetic, composition
-    CONDITION = auto()      # if, guarded
+    CONDITION = auto()      # if, guarded, pick, property, qformula
     LOCATION = auto()       # assignment
     LHS = auto()            # assignment, comparison
     RHS = auto()            # assignment, comparison
     THEN = auto()           # if
     ELSE = auto()           # if
+    MODALITY = auto()       # property-def
     OF = auto()             # ref
     OFFSET = auto()         # ref
     QUANTIFIER = auto()     # qvar
-    SYNTHETIC = auto()      # (Used to mark synthetised nodes)
+    QVARS = auto()          # qformula
     TYPE = auto()           # literal
     VALUE = auto()          # literal
+    INTERFACE = auto()      # agent
+    STIGMERGIES = auto()    # agent, system
 
 
 @unique
@@ -64,16 +68,22 @@ class NodeType(StringEnum):
     ASSIGN = auto()
     BLOCK = auto()
     BUILTIN = auto()
+    CALL = auto()
     COMPARISON = auto()
     COMPOSITION = auto()
     EXPR = auto()
     GUARDED = auto()
     IF = auto()
     LITERAL = auto()
+    PICK = auto()
     PROCDEF = auto()
+    PROPERTY_DEF = auto()
+    QFORMULA = auto()
+    QVAR = auto()
     RAW_CALL = auto()
     REF = auto()
     REF_LINK = auto()
+    STIGMERGY = auto()
 
     def __contains__(self, __o: str) -> bool:
         return all((
