@@ -68,7 +68,9 @@ class NodeType(StringEnum):
     CALL = auto()
     COMPARISON = auto()
     COMPOSITION = auto()
+    DECLARATION = auto()
     EXPR = auto()
+    EXT_REF = auto()
     GUARDED = auto()
     IF = auto()
     LITERAL = auto()
@@ -81,6 +83,7 @@ class NodeType(StringEnum):
     REF = auto()
     REF_LINK = auto()
     STIGMERGY = auto()
+    SYSTEM = auto()
 
     def __contains__(self, __o: str) -> bool:
         return all((
@@ -156,7 +159,6 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
         NodeType.ASSIGN: (Attr.LOCATION, Attr.LHS, Attr.RHS),
         NodeType.BLOCK: (Attr.BODY,),
         NodeType.BUILTIN: (Attr.OPERANDS,),
-        "check": ("properties",),
         NodeType.COMPARISON: (Attr.LHS, Attr.RHS),
         NodeType.GUARDED: (Attr.CONDITION, Attr.BODY),
         NodeType.IF: (Attr.CONDITION, Attr.THEN, Attr.ELSE),
@@ -168,10 +170,13 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
         NodeType.RAW_CALL: (Attr.OPERANDS),
         NodeType.REF: (Attr.OF, Attr.OFFSET),
         NodeType.REF_LINK: (Attr.OF, Attr.OFFSET),
+        NodeType.STIGMERGY: (Attr.CONDITION, "tuples"),
+        NodeType.SYSTEM: ("extern", "spawn", Attr.PROCDEFS),
+        # Intermediate nodes
+        "assume": ("assumptions",),
+        "check": ("properties",),
         "spawn-expression": ("num",),
         "spawn": ("spawn",),
-        NodeType.STIGMERGY: (Attr.CONDITION, "tuples"),
-        "system": ("extern", "spawn", Attr.PROCDEFS),
     }
     to_remove = {
         "extern": (Attr.NAME,),
@@ -198,15 +203,15 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
         "array": lambda t: {Attr.NAME: t[ast_type]},
         NodeType.CALL: lambda t: {Attr.NAME: t[0]},
         NodeType.COMPOSITION: lambda _: {Attr.OPERANDS: _t[_t[Attr.NAME]]},
-        "decl": lambda t: {"init": t[1]},
         NodeType.EXPR: lambda _: {Attr.OPERANDS: toks[0][0::2]},
-        "ext": lambda t: {Attr.NAME: t[0]},
+        NodeType.EXT_REF: lambda t: {Attr.NAME: t[0]},
+        NodeType.PROCDEF: lambda t: {Attr.BODY: t[Attr.BODY].asList()[0]},
+        NodeType.DECLARATION: lambda t: {"init": t[1]},
         "extern": lambda t: {"extern": t.asList()},
         "init-range": lambda t: {"start": t[0], "bound": t[1]},
         "init-value": lambda _: {"value": toks["init-value"]},
         "interface": lambda t: {"interface": t.asList()},
         "stigmergies": lambda t: {"stigmergies": t.asList()},
-        NodeType.PROCDEF: lambda t: {Attr.BODY: t[Attr.BODY].asList()[0]},
         "scalar": lambda t: {Attr.NAME: t[ast_type]},
         "spawn": lambda t: {"spawn": t.asList()},
         "values": lambda t: {"values": t.asList()},
@@ -287,7 +292,7 @@ def makeExprParsers(pvarrefMaker):
             Optional(delimitedList(expr)(Attr.OPERANDS)) + RPAR
         )(NodeType.BUILTIN) |  # noqa: E501
         var_ref |
-        EXTERN("ext")
+        EXTERN(NodeType.EXT_REF)
     ).setParseAction(make_node)
 
     expr <<= infixNotation(expr_atom, [
@@ -389,7 +394,7 @@ PROCDEF = (
 
 DECLARATION = (
     LHS("var") + COLON + INITIALIZER
-)("decl").setParseAction(make_node)
+)(NodeType.DECLARATION).setParseAction(make_node)
 
 SYSTEM = (
     Keyword("system").suppress() + LBRACE + (
@@ -447,7 +452,7 @@ CHECK = (
 ).setParseAction(make_node)
 
 FILE = (
-    SYSTEM("system") +
+    SYSTEM(NodeType.SYSTEM) +
     ZeroOrMore(STIGMERGY)("stigmergies") +
     OneOrMore(AGENT)("agents") +
     Optional(ASSUME("assume")) +
