@@ -145,10 +145,10 @@ def make_node(s, loc, toks):
             del node[x]
 
     to_add = {
-        "agent": ("interface", Attr.PROCDEFS),
+        NodeType.AGENT: (Attr.INTERFACE, Attr.STIGMERGIES, Attr.PROCDEFS),
         NodeType.ASSIGN: (Attr.LOCATION, Attr.LHS, Attr.RHS),
         "assume": ("assumptions",),
-        "assumption": ("quant",),
+        # "assumption": ("quant",),
         NodeType.BLOCK: (Attr.BODY,),
         NodeType.BUILTIN: (Attr.OPERANDS,),
         "check": ("properties",),
@@ -157,15 +157,16 @@ def make_node(s, loc, toks):
         NodeType.GUARDED: (Attr.CONDITION, Attr.BODY),
         NodeType.IF: (Attr.CONDITION, Attr.THEN, Attr.ELSE),
         NodeType.LITERAL: (Attr.TYPE, Attr.VALUE),
-        "property": ("modality", "quant"),
-        "quant": ("qvars", "formula"),
-        "qvar": (Attr.TYPE, Attr.QUANTIFIER),
+        NodeType.PROPERTY_DEF: (Attr.MODALITY, Attr.CONDITION),
+        NodeType.QFORMULA: (Attr.QVARS, Attr.CONDITION),
+        NodeType.PICK: (Attr.CONDITION, Attr.TYPE, Attr.VALUE),
+        NodeType.QVAR: (Attr.TYPE, Attr.QUANTIFIER),
         NodeType.RAW_CALL: (Attr.OPERANDS),
         NodeType.REF: (Attr.OF, Attr.OFFSET),
         NodeType.REF_LINK: (Attr.OF, Attr.OFFSET),
         "spawn-expression": ("num",),
         "spawn": ("spawn",),
-        "stigmergy": ("link", "tuples"),
+        NodeType.STIGMERGY: (Attr.CONDITION, "tuples"),
         "system": ("extern", "spawn", Attr.PROCDEFS),
     }
     to_remove = {
@@ -178,8 +179,8 @@ def make_node(s, loc, toks):
 
     for field in (
         Attr.OPERANDS, "tuples", "spawn", "extern", Attr.BODY,
-        Attr.LHS, Attr.RHS, Attr.OPERANDS, "qvars", Attr.PROCDEFS,
-        "assumptions", "properties"
+        Attr.LHS, Attr.RHS, Attr.OPERANDS, Attr.QVARS, Attr.PROCDEFS,
+        "assumptions", "properties", "interface"
     ):
         if field in node:
             if hasattr(node[field], "asList"):
@@ -191,16 +192,17 @@ def make_node(s, loc, toks):
 
     projections = {
         "array": lambda t: {Attr.NAME: t[ast_type]},
-        "call": lambda t: {Attr.NAME: t[0]},
-        "composition": lambda _: {Attr.OPERANDS: _t[_t[Attr.NAME]]},
+        NodeType.CALL: lambda t: {Attr.NAME: t[0]},
+        NodeType.COMPOSITION: lambda _: {Attr.OPERANDS: _t[_t[Attr.NAME]]},
         "decl": lambda t: {"init": t[1]},
-        "expr": lambda _: {Attr.OPERANDS: toks[0][0::2]},
+        NodeType.EXPR: lambda _: {Attr.OPERANDS: toks[0][0::2]},
         "ext": lambda t: {Attr.NAME: t[0]},
         "extern": lambda t: {"extern": t.asList()},
         "init-range": lambda t: {"start": t[0], "bound": t[1]},
         "init-value": lambda _: {"value": toks["init-value"]},
         "interface": lambda t: {"interface": t.asList()},
-        "procdef": lambda t: {Attr.BODY: t[Attr.BODY].asList()[0]},
+        "stigmergies": lambda t: {"stigmergies": t.asList()},
+        NodeType.PROCDEF: lambda t: {Attr.BODY: t[Attr.BODY].asList()[0]},
         "scalar": lambda t: {Attr.NAME: t[ast_type]},
         "spawn": lambda t: {"spawn": t.asList()},
         "values": lambda t: {"values": t.asList()},
@@ -208,6 +210,11 @@ def make_node(s, loc, toks):
 
     if ast_type in projections:
         node.update(projections[ast_type](toks))
+    elif ast_type == NodeType.AGENT:
+        if "interface" in _t:
+            node[Attr.INTERFACE] = _t["interface"]["interface"]
+        if "stigmergies" in _t:
+            node[Attr.STIGMERGIES] = _t["stigmergies"]["stigmergies"]
     elif ast_type in (NodeType.REF, NodeType.REF_LINK):
         if Attr.OFFSET in node:
             node[Attr.OFFSET] = node[Attr.OFFSET][0]
@@ -304,11 +311,11 @@ def makeExprParsers(pvarrefMaker):
         QUANTIFIER(Attr.QUANTIFIER) -
         IDENTIFIER(Attr.TYPE) -
         VARNAME(Attr.NAME)
-    )("qvar").setParseAction(make_node)
+    )(NodeType.QVAR).setParseAction(make_node)
 
     quant <<= (
-        delimitedList(quant_var)("qvars") - COMMA - bexpr("formula")
-    )("quant").setParseAction(make_node)
+        delimitedList(quant_var)(Attr.QVARS) + COMMA + bexpr(Attr.CONDITION)
+    )(NodeType.QFORMULA).setParseAction(make_node)
 
     return expr, bexpr, quant
 
@@ -326,14 +333,16 @@ INITIALIZER = (
 
 PICK = (
     Keyword("pick").suppress() +
-    ppc.integer()("num") +
-    pp.Optional(IDENTIFIER)("agent-type") +
-    pp.Optional(Keyword("where").suppress() + LINKBEXPR)
-)("pick").setParseAction(make_node)
+    ppc.integer()(Attr.VALUE) +
+    pp.Optional(IDENTIFIER)(Attr.TYPE) +
+    pp.Optional(
+        ungroup(Keyword("where").suppress() + LINKBEXPR)
+    )(Attr.CONDITION)
+)(NodeType.PICK).setParseAction(make_node)
 
 LHS = (VARREF)(NodeType.REF).setParseAction(make_node)
 RHS = (
-    (pp.FollowedBy(QUANTIFIER) + QUANT)("quant") |
+    (pp.FollowedBy(QUANTIFIER) + QUANT)(NodeType.QFORMULA) |
     PICK |
     ungroup(EXPR)
 ).setName("rhs expression")
@@ -345,45 +354,18 @@ ASSIGN_OP = (
     Literal(":=").setParseAction(lambda _: "local")
 ).setName("assignment operator")
 
-
-ASSIGN = ungroup(
-    (
-        delimitedList(LHS)(Attr.LHS) +
-        ASSIGN_OP(Attr.LOCATION) +
-        # Literal("<--").setParseAction(lambda _: "environment")(Attr.LOCATION) +
-        delimitedList(RHS)(Attr.RHS)
-    )(NodeType.ASSIGN)
-    # |
-    # (
-    #     delimitedList(VARREF)(Attr.LHS) +
-    #     Suppress("<~")(Attr.LOCATION).setParseAction(lambda _: "stigmergy") +
-    #     delimitedList(RHS)(Attr.RHS)
-    # )("assign") |
-    # (
-    #     delimitedList(LHS)(Attr.LHS) +
-    #     Literal("<-")(Attr.LOCATION).setParseAction(lambda _: "interface") +
-    #     delimitedList(RHS)(Attr.RHS)
-    # )("assign")
+ASSIGN = ungroup((
+    delimitedList(LHS)(Attr.LHS) +
+    ASSIGN_OP(Attr.LOCATION) +
+    delimitedList(RHS)(Attr.RHS))(NodeType.ASSIGN)
 ).setParseAction(make_node)
 
-
-# ASSIGN_BLOCK = (
-#     ASSIGN |
-#     (
-#         delimitedList(LHS)(Attr.LHS) +
-#         Suppress(":=") +
-#         delimitedList(RHS)(Attr.RHS)
-#     )("assign").setParseAction(make_node)
-# )
-
 PROC = Forward()
-PROCBASE = (
-    (
-        FollowedBy(BEXPR) + BEXPR(Attr.CONDITION) + Suppress("->") +
-        PROC(Attr.BODY)
-    )(NodeType.GUARDED) |
+PROCBASE = ((
+    FollowedBy(BEXPR) + BEXPR(Attr.CONDITION) + Suppress("->") +
+    PROC(Attr.BODY))(NodeType.GUARDED) |
     Keyword("Skip")("Skip") |
-    IDENTIFIER("call") |
+    IDENTIFIER(NodeType.CALL) |
     ASSIGN |
     (
         LBRACE -
@@ -412,8 +394,8 @@ SYSTEM = (
         Optional(named_list(
             "spawn",
             (IDENTIFIER(Attr.NAME) + COLON + EXPR("num"))("spawn-expression"),
-            COMMA
-        ))) +
+            COMMA))
+    ) +
     ZeroOrMore(PROCDEF)(Attr.OPERANDS) +
     RBRACE
 ).setParseAction(make_node)
@@ -426,11 +408,11 @@ TUPLEDEF = (
 STIGMERGY = (
     Keyword("stigmergy").suppress() + IDENTIFIER(Attr.NAME) +
     LBRACE +
-    Keyword("link").suppress() + EQ + LINKBEXPR("link") +
+    Keyword("link").suppress() + EQ + LINKBEXPR(Attr.CONDITION) +
     ZeroOrMore(Group(TUPLEDEF))("tuples") +
     # SkipTo(RBRACE).suppress() +
     RBRACE
-)("stigmergy").setParseAction(make_node)
+)(NodeType.STIGMERGY).setParseAction(make_node)
 
 AGENT = (
     Keyword("agent").suppress() + IDENTIFIER(Attr.NAME) +
@@ -439,14 +421,14 @@ AGENT = (
         & Optional(named_list("stigmergies", IDENTIFIER))) +
     ZeroOrMore(PROCDEF)(Attr.PROCDEFS) +
     RBRACE
-)("agent").setParseAction(make_node)
+)(NodeType.AGENT).setParseAction(make_node)
 
 ASSUME = (
     Keyword("assume").suppress() + LBRACE +
     # SkipTo(RBRACE) +
     ZeroOrMore((
-        IDENTIFIER(Attr.NAME) + EQ + QUANT("quant")
-    )("assumption"))("assumptions") +
+        IDENTIFIER(Attr.NAME) + EQ + ungroup(QUANT)(Attr.CONDITION)
+    )(NodeType.PROPERTY_DEF).setParseAction(make_node))("assumptions") +
     RBRACE
 ).setParseAction(make_node)
 
@@ -454,8 +436,8 @@ CHECK = (
     Keyword("check").suppress() + LBRACE +
     ZeroOrMore((
         IDENTIFIER(Attr.NAME) + EQ +
-        MODALITY("modality") + QUANT("quant")
-        )("property").setParseAction(make_node)
+        MODALITY(Attr.MODALITY) + ungroup(QUANT)(Attr.CONDITION)
+        )(NodeType.PROPERTY_DEF).setParseAction(make_node)
     )("properties") +
     RBRACE
 ).setParseAction(make_node)
@@ -476,8 +458,8 @@ def parse_to_dict(path) -> dict:
         p = FILE.parseFile(fp, parseAll=True)
     return {
         "system": p.system,
-        "agents": p.agents.asList(),
-        "stigmergies": p.stigmergies or [],
+        "agents": p.agents.asList() or [],
+        "stigmergies": p.stigmergies.asList() or [],
         "assume": p.assume or [],
         "check": p.check or []
     }
