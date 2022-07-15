@@ -23,9 +23,6 @@ class StringEnum(str, Enum):
     def __repr__(self) -> str:
         return f"'{self.value}'"
 
-    # def __eq__(self, __o: object) -> bool:
-    #     return isinstance(__o, StringEnum) and super().__eq__(__o)
-
     def __hash__(self) -> int:
         return super().__hash__()
 
@@ -107,7 +104,17 @@ MODALITY = oneOfKw("always eventually fairly fairly_inf finally")
 kws_upper = oneOfKw("Skip Nil")
 
 
-def make_node(s, loc, toks):
+def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
+    """Turn a ParseResults object into an AST node.
+
+    Args:
+        s (str): Original string being parsed
+        loc (int): Location of the matched results
+        toks (pp.ParseResults): An object holding the parsed elements
+
+    Returns:
+        dict: An AST node
+    """
     _t = toks.asDict()
     try:
         ast_type = toks.getName() or toks[0][1]
@@ -147,13 +154,10 @@ def make_node(s, loc, toks):
     to_add = {
         NodeType.AGENT: (Attr.INTERFACE, Attr.STIGMERGIES, Attr.PROCDEFS),
         NodeType.ASSIGN: (Attr.LOCATION, Attr.LHS, Attr.RHS),
-        "assume": ("assumptions",),
-        # "assumption": ("quant",),
         NodeType.BLOCK: (Attr.BODY,),
         NodeType.BUILTIN: (Attr.OPERANDS,),
         "check": ("properties",),
         NodeType.COMPARISON: (Attr.LHS, Attr.RHS),
-        "decl": ("var", "init-value", "init-range", "init-list"),
         NodeType.GUARDED: (Attr.CONDITION, Attr.BODY),
         NodeType.IF: (Attr.CONDITION, Attr.THEN, Attr.ELSE),
         NodeType.LITERAL: (Attr.TYPE, Attr.VALUE),
