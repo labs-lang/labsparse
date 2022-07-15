@@ -1,10 +1,10 @@
-from enum import Enum
 import json
-from pathlib import Path
-from dataclasses import dataclass, asdict
-import pyparsing as pp
-
+from dataclasses import asdict, dataclass
+from enum import Enum
 from parser import Attr
+from pathlib import Path
+
+import pyparsing as pp
 
 
 class OutputFormat(Enum):

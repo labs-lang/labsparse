@@ -1,14 +1,12 @@
 import operator
 from functools import reduce
+from parser import Attr, NodeType
 
 from checker import walk
-from parser import Attr, NodeType
 
 
 def evaluate(node):
     """Evaluate an expression node."""
-
-
     operators = {
         "+": operator.add,
         "-": operator.sub,
@@ -67,7 +65,7 @@ def simplify(proc):
         return proc
 
 
-def optimize(ast, level=1):
+def optimize(ast, level=0):
     if level >= 1:
         for n in (n for n in walk(ast) if n in NodeType.PROCDEF):
             n[Attr.BODY] = simplify(n[Attr.BODY])
