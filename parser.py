@@ -467,8 +467,8 @@ def parse_to_dict(path) -> dict:
         p = FILE.parseFile(fp, parseAll=True)
     return {
         "system": p.system,
-        "agents": p.agents.asList() or [],
-        "stigmergies": p.stigmergies.asList() or [],
+        "agents": [] if p.agents == "" else p.agents.asList(),
+        "stigmergies": [] if p.stigmergies == "" else p.stigmergies.asList(),
         "assume": p.assume or [],
         "check": p.check or []
     }
