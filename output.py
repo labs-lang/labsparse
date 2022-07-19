@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
-from parser import Attr
+from parser import Attr, NodeType, walk
 from pathlib import Path
 
 import pyparsing as pp
@@ -96,3 +96,98 @@ def print_many(messages, fmt=OutputFormat.TEXT):
         OutputFormat.TEXT: text_fn,
         OutputFormat.JSON: json_fn
     }[fmt]()
+
+
+_SYNTAX = {
+    "choice": " ++\n",
+    "environment": "<--",
+    "interface": "<-",
+    "local": ":=",
+    "par": " ||\n",
+    "stigmergy": "<~",
+    "seq": ";\n",
+    "unary-minus": "-",
+    "unary-not": "!"
+}
+
+
+_SYNTAX = {
+    "choice": " ++\n",
+    "environment": "<--",
+    "interface": "<-",
+    "local": ":=",
+    "par": " ||\n",
+    "stigmergy": "<~",
+    "seq": ";\n",
+    "unary-minus": "-",
+    "unary-not": "!"
+}
+
+
+def sprint_labs(n, indent=""):
+    def up_indent():
+        return indent + "  "
+
+    def sprint_list(lst, sep=", "):
+        return sep.join(sprint_labs(x) for x in lst)
+
+    def recurse_on(attr: Attr, inline=True, push_indent=False):
+        if push_indent:
+            inline = False
+        i = "" if inline else up_indent() if push_indent else indent
+        if isinstance(n[attr], list):
+            result = "\n".join([sprint_labs(x, i) for x in n[attr]])
+        else:
+            result = sprint_labs(n[attr], i)
+        return result if inline else "\n" + result
+
+    if n in NodeType.ASSIGN:
+        op = _SYNTAX[n[Attr.LOCATION]]
+        lhs, rhs = sprint_list(n[Attr.LHS]), sprint_list(n[Attr.RHS])
+        return f"{indent}{lhs} {op} {rhs}"
+
+    elif n in NodeType.BLOCK:
+        body = recurse_on(Attr.BODY, push_indent=True)
+        return f"{indent}{{{body}\n{indent}}}"
+
+    elif n in NodeType.BUILTIN:
+        return f"{n[Attr.NAME]}({sprint_list(n[Attr.OPERANDS])})"
+
+    elif n in NodeType.REF:
+        result = n[Attr.NAME]
+        if Attr.OFFSET in n:
+            result += f"[{recurse_on(Attr.OFFSET)}]"
+        if Attr.OF in n:
+            result = f"({result} of {recurse_on(Attr.OF)})"
+        return result
+
+    elif n in NodeType.LITERAL:
+        if n[Attr.TYPE] == "bool":
+            return "true" if n[Attr.VALUE] else "false"
+        else:
+            return str(n[Attr.VALUE])
+
+    elif n in NodeType.PROCDEF:
+        return f"{n[Attr.NAME]} = {recurse_on(Attr.BODY, push_indent=True)}"
+    elif n in NodeType.COMPOSITION:
+        procs = [sprint_labs(x, up_indent()) for x in n[Attr.OPERANDS]]
+        result = _SYNTAX[n[Attr.NAME]].join(procs)
+        return result if len(procs) > 1 else f"{indent}({result}\n{indent})"
+    elif n in NodeType.GUARDED:
+        return f"{indent}{recurse_on(Attr.CONDITION)} -> ({recurse_on(Attr.BODY, inline=False, push_indent=True)}\n{indent})"   # noqa: E501
+    elif n in NodeType.EXPR or n in NodeType.COMPARISON:
+        operands = [sprint_labs(n) for n in n[Attr.OPERANDS]]
+        op = _SYNTAX.get(n[Attr.NAME], f" {n[Attr.NAME]} ")
+        if len(operands) > 1:
+            return f"({op.join(operands)})"
+        else:
+            return f"{op}({operands[0]})"
+    elif n in NodeType.EXT_REF or n in NodeType.CALL:
+        return f"{indent}{n[Attr.NAME]}"
+    return str(n)
+
+
+def sprint_labs_ast(ast):
+    for x in walk(ast):
+        if x in NodeType.PROCDEF:
+            print(sprint_labs(x))

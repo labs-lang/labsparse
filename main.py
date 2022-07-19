@@ -11,7 +11,7 @@ import typer
 
 from checker import run
 from pyparsing import ParseBaseException
-from output import Message, OutputFormat, j_dump, print_many
+from output import Message, OutputFormat, j_dump, print_many, sprint_labs_ast
 
 
 def print_version(flag):
@@ -53,6 +53,7 @@ def main(
         if dump_ast:
             dump_fn = {
                 OutputFormat.JSON: j_dump,
+                OutputFormat.LABS: sprint_labs_ast,
                 OutputFormat.MASSEUR: j_dump  # TODO
             }.get(output_format, lambda _: pprint.pprint(ast, width=40))
 
