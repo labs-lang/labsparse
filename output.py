@@ -33,7 +33,7 @@ class Message:
         {
             OutputFormat.TEXT: text_fn,
             OutputFormat.JSON: json_fn
-        }[fmt]()
+        }.get(fmt, text_fn)()
 
     @classmethod
     def from_node(_, message_id, message, node) -> 'Message':
