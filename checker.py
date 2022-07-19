@@ -3,7 +3,7 @@ from itertools import combinations
 from parser import Attr, NodeType, kw
 from typing import List
 
-from message import Message
+from output import Message
 
 
 def walk(d):

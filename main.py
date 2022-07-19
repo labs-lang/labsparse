@@ -11,7 +11,7 @@ import typer
 
 from checker import run
 from pyparsing import ParseBaseException
-from message import Message, OutputFormat, j_dump, print_many
+from output import Message, OutputFormat, j_dump, print_many
 
 
 def print_version(flag):
