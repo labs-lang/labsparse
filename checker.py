@@ -97,16 +97,14 @@ def check_externs(ast: dict) -> List[Message]:
 
 def check_builtins(ast: dict) -> List[Message]:
     arities = {
-        "abs": 1,
-        "max": 2,
-        "min": 2,
-        "unary-minus": 1
+        **{op: 1 for op in ("abs", "unary-minus", "unary-not")},
+        **{op: 2 for op in ("max", "min", ">=", "<=", ">", "<", "=", "!=")}
     }
 
     def body(n, _, result):
-        expected = arities[n[Attr.NAME]]
+        expected = arities.get(n[Attr.NAME])
         got = len(n.get(Attr.OPERANDS, []))
-        if expected != got:
+        if expected is not None and expected != got:
             where = n
             if expected < got:
                 where = n[Attr.OPERANDS][expected]
@@ -118,7 +116,7 @@ def check_builtins(ast: dict) -> List[Message]:
                     f"Wrong arity for '{n[Attr.NAME]}' "
                     f"(expected {expected}, got {got})"),
                 node=where))
-    return check(ast, lambda n: n in NodeType.BUILTIN, body)
+    return check(ast, lambda n: n in NodeType.BUILTIN or n in NodeType.EXPR, body)
 
 
 def run(ast: dict) -> List[Message]:
