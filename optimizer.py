@@ -2,9 +2,7 @@ import operator
 from functools import reduce
 from inspect import signature
 
-from parser import Attr, NodeType
-
-from checker import walk
+from parser import Attr, NodeType, walk
 
 
 def evaluate(node):

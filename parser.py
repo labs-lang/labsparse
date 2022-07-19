@@ -480,3 +480,17 @@ def parse_to_dict(path) -> dict:
         "assume": p.assume or [],
         "check": p.check or []
     }
+
+
+def walk(d):
+    """Return all AST nodes in d as an iterable.
+    """
+    if isinstance(d, dict):
+        if Attr.NODE_TYPE in d:
+            yield d
+        for val in d.values():
+            if isinstance(val, list):
+                for x in val:
+                    yield from walk(x)
+            elif isinstance(val, dict):
+                yield from walk(val)

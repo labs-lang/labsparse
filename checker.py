@@ -1,23 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import combinations
-from parser import Attr, NodeType, kw
+from parser import Attr, NodeType, kw, walk
 from typing import List
 
 from output import Message
-
-
-def walk(d):
-    """Return all AST nodes in d as an iterable.
-    """
-    if isinstance(d, dict):
-        if Attr.NODE_TYPE in d:
-            yield d
-        for val in d.values():
-            if isinstance(val, list):
-                for x in val:
-                    yield from walk(x)
-            elif isinstance(val, dict):
-                yield from walk(val)
 
 
 def check(ast, filter_fn, body) -> List[Message]:
@@ -116,7 +102,7 @@ def check_builtins(ast: dict) -> List[Message]:
                     f"Wrong arity for '{n[Attr.NAME]}' "
                     f"(expected {expected}, got {got})"),
                 node=where))
-    return check(ast, lambda n: n in NodeType.BUILTIN or n in NodeType.EXPR, body)
+    return check(ast, lambda n: n in NodeType.BUILTIN or n in NodeType.EXPR, body)  # noqa: E501
 
 
 def run(ast: dict) -> List[Message]:
