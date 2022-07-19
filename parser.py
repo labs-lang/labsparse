@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from enum import Enum, auto, unique
+from typing import Any
 
 import pyparsing as pp
 from pyparsing import (Combine, FollowedBy, Forward, Group, Keyword, Literal,
@@ -26,12 +27,6 @@ class StringEnum(str, Enum):
     def __hash__(self) -> int:
         return super().__hash__()
 
-    def __contains__(self, __o: str) -> bool:
-        try:
-            return __o[Attr.NODE_TYPE] == self
-        except (KeyError, TypeError):
-            return False
-
 
 @unique
 class Attr(StringEnum):
@@ -48,7 +43,7 @@ class Attr(StringEnum):
 
     BODY = auto()           # block, procdef
     PROCDEFS = auto()       # system, agent
-    OPERANDS = auto()       # arithmetic, composition
+    OPERANDS = auto()       # arithmetic, composition, comparison
     CONDITION = auto()      # if, guarded, pick, property, qformula
     LOCATION = auto()       # assignment
     LHS = auto()            # assignment, comparison
@@ -92,11 +87,11 @@ class NodeType(StringEnum):
     STIGMERGY = auto()
     SYSTEM = auto()
 
-    def __contains__(self, __o: str) -> bool:
-        return all((
-            isinstance(__o, dict),
-            Attr.NODE_TYPE in __o,
-            __o[Attr.NODE_TYPE] == self))
+    def __contains__(self, __o: Any) -> bool:
+        try:
+            return __o[Attr.NODE_TYPE] == self
+        except (TypeError, KeyError):
+            return False
 
 
 def oneOfKw(lst):
@@ -131,8 +126,10 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
     except KeyError:
         return toks[0]
 
-    if isinstance(ast_type, dict) and toks[0][0] == "-":
-        _t[Attr.NAME] = "unary-minus"
+    unary_ops = {"-": "unary-minus", "!": "unary-not"}
+
+    if isinstance(ast_type, dict) and toks[0][0] in unary_ops:
+        _t[Attr.NAME] = unary_ops[toks[0][0]]
         _t[Attr.OPERANDS] = [toks[0][1]]
         ast_type = NodeType.BUILTIN
     elif ast_type in ("seq", "choice", "par"):
@@ -166,7 +163,6 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
         NodeType.ASSIGN: (Attr.LOCATION, Attr.LHS, Attr.RHS),
         NodeType.BLOCK: (Attr.BODY,),
         NodeType.BUILTIN: (Attr.OPERANDS,),
-        NodeType.COMPARISON: (Attr.LHS, Attr.RHS),
         NodeType.GUARDED: (Attr.CONDITION, Attr.BODY),
         NodeType.IF: (Attr.CONDITION, Attr.THEN, Attr.ELSE),
         NodeType.LITERAL: (Attr.TYPE, Attr.VALUE),
@@ -209,6 +205,8 @@ def make_node(s: str, loc: int, toks: pp.ParseResults) -> dict:
     projections = {
         "array": lambda t: {Attr.NAME: t[ast_type]},
         NodeType.CALL: lambda t: {Attr.NAME: t[0]},
+        NodeType.COMPARISON: lambda _:
+            {Attr.OPERANDS: [_t["cmp-lhs"], _t["cmp-rhs"]]},
         NodeType.COMPOSITION: lambda _: {Attr.OPERANDS: _t[_t[Attr.NAME]]},
         NodeType.EXPR: lambda _: {Attr.OPERANDS: toks[0][0::2]},
         NodeType.EXT_REF: lambda t: {Attr.NAME: t[0]},
@@ -311,13 +309,16 @@ def makeExprParsers(pvarrefMaker):
         ("+", 2, opAssoc.LEFT, make_node),
         ("-", 2, opAssoc.LEFT, make_node)])
 
+    bop = oneOf('!= = <= >= >') | (~Literal("<-") + Literal("<"))
+
     bexpr_atom = (
         oneOfKw("true false")("literal-bool") |
-        (expr(Attr.LHS) + oneOf("> < = >= <= !=")(Attr.NAME) + expr(Attr.RHS))(NodeType.COMPARISON) ^  # noqa: E501
+        (expr("cmp-lhs") + ungroup(bop)(Attr.NAME) + expr("cmp-rhs"))(NodeType.COMPARISON) ^  # noqa: E501
         expr
     ).setParseAction(make_node)
 
     bexpr <<= infixNotation(bexpr_atom, [
+        (Literal("!"), 1, opAssoc.RIGHT, make_node),
         (Keyword("and"), 2, opAssoc.LEFT, make_node),
         (Keyword("or"), 2, opAssoc.LEFT, make_node)
         ])
