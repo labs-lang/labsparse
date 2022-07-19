@@ -9,6 +9,7 @@ import pyparsing as pp
 
 class OutputFormat(Enum):
     TEXT = "text"
+    LABS = "labs"
     MASSEUR = "masseur"
     JSON = "json"
 
