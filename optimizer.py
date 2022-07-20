@@ -47,6 +47,7 @@ def evaluate(node):
             new = Literal(node[Attr.PATH], node[Attr.LN], node[Attr.COL], {})
             new[Attr.VALUE] = value
             new[Attr.TYPE] = "bool" if isinstance(value, bool) else "int"
+            new[Attr.SYNTHETIC] = True
 
             if others:
                 others.append(new)

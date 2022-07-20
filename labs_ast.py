@@ -90,7 +90,7 @@ class NodeType(StringEnum):
 
 
 class Node:
-    __slots__ = Attr.PATH, Attr.LN, Attr.COL
+    __slots__ = Attr.PATH, Attr.LN, Attr.COL, Attr.SYNTHETIC
     AS_NODETYPE = None
 
     @classmethod
@@ -108,7 +108,6 @@ class Node:
         return Root(
             system[Attr.PATH], system[Attr.LN], system[Attr.COL],
             system, agents, stigmergies, assume, check)
-
 
     def walk(self):
         yield self
@@ -169,8 +168,11 @@ class Node:
 
         return {
             Attr.NODE_TYPE: self.AS_NODETYPE.value,
-            **{k: handle(self._get(k)) for k in Node.__slots__},
-            **{k: handle(self._get(k)) for k in self.__slots__}
+            **{
+                k: handle(self[k]) for k in Node.__slots__
+                if k != Attr.SYNTHETIC or getattr(self, Attr.SYNTHETIC, False)
+            },
+            **{k: handle(self[k]) for k in self.__slots__}
         }
 
     def __repr__(self) -> str:
