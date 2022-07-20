@@ -107,19 +107,6 @@ def print_many(messages, fmt=OutputFormat.TEXT):
     }[fmt]()
 
 
-_SYNTAX = {
-    "choice": " ++\n",
-    "environment": "<--",
-    "interface": "<-",
-    "local": ":=",
-    "par": " ||\n",
-    "stigmergy": "<~",
-    "seq": ";\n",
-    "unary-minus": "-",
-    "unary-not": "!"
-}
-
-
 def sprint_labs(n, indent=""):
     def up_indent():
         return indent + "  "
@@ -178,12 +165,13 @@ def sprint_labs(n, indent=""):
             return f"({op.join(operands)})"
         else:
             return f"{op}({operands[0]})"
-    elif n in NodeType.EXT_REF or n in NodeType.CALL:
+    elif n in NodeType.REF_EXT or n in NodeType.CALL:
         return f"{indent}{n[Attr.NAME]}"
     return str(n)
 
 
 def sprint_labs_ast(ast):
-    for x in walk(ast):
-        if x in NodeType.PROCDEF:
-            print(sprint_labs(x))
+    pass
+    # for x in walk(ast):
+    #     if x in NodeType.PROCDEF:
+    #         print(sprint_labs(x))
