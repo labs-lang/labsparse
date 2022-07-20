@@ -322,10 +322,9 @@ def parse_to_dict(path) -> dict:
     _path = str(path)
     with open(path) as fp:
         p = FILE.parseFile(fp, parseAll=True)
-    return {
-        "system": p.system,
-        "agents": [] if p.agents == "" else p.agents.asList(),
-        "stigmergies": [] if p.stigmergies == "" else p.stigmergies.asList(),
-        "assume": p.assume or [],
-        "check": p.check or []
-    }
+    return Node.make_root(
+        p.system,
+        [] if p.agents == "" else p.agents.asList(),
+        [] if p.stigmergies == "" else p.stigmergies.asList(),
+        p.assume or [],
+        p.check or [])
