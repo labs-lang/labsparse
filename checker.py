@@ -1,5 +1,7 @@
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import combinations
+from labs_ast import Builtin, Expr, Node, Ref, RefExt, RefLink, Assign, Root
 from parser import Attr, NodeType, kw
 from typing import List
 
@@ -9,30 +11,36 @@ from output import Message
 def check(ast, filter_fn, body) -> List[Message]:
     """Template for a checker."""
     result = []
-    for n in (n for n in walk(ast) if filter_fn(n)):
-        body(n, ast, result)
+    for n in (n for n in ast.walk() if filter_fn(n)):
+        body(n, result)
 
     return result
 
 
-def check_assign(ast: dict) -> List[Message]:
+def is_(*node_classes):
+    def fn(node):
+        return any((isinstance(node, c) for c in node_classes))
+    return fn
+
+
+def check_assign(ast: Node) -> List[Message]:
     """Checks related to assignment statements."""
-    def body(node, ast, result):
-        for var in node["lhs"]:
-            if var["name"] == "id":
+    def body(node, result):
+        for var in node[Attr.LHS]:
+            if var[Attr.NAME] == "id":
                 result.append(Message.from_node(
                     message_id="E001",
                     message="Cannot assign to 'id'",
                     node=var))
-        if len(node["lhs"]) != len(node["rhs"]):
+        if len(node[Attr.LHS]) != len(node[Attr.RHS]):
             result.append(Message.from_node(
                 message_id="E002",
                 message=(
                     "Invalid number of expressions "
-                    f'(expected {len(node["lhs"])}, got {len(node["rhs"])})'),
+                    f'(expected {len(node[Attr.LHS])}, got {len(node[Attr.RHS])})'),
                 node=node))
-        if len(node["lhs"]) > 1:
-            for v1, v2 in combinations(node["lhs"], 2):
+        if len(node[Attr.LHS]) > 1:
+            for v1, v2 in combinations(node[Attr.LHS], 2):
                 if v1["name"] == v2["name"]:
                     result.append(Message.from_node(
                         message_id="E003",
@@ -41,44 +49,58 @@ def check_assign(ast: dict) -> List[Message]:
                             "assigned multiple times"),
                         node=v2))
 
-    return check(ast, lambda n: n in NodeType.ASSIGN, body)
+    return check(ast, is_(Assign), body)
 
 
-def check_ref(ast: dict) -> List[Message]:
-    def body(n, ast, result):
-        if n["name"] in kw.split():
+def check_ref(ast: Root) -> List[Message]:
+    def body(n, result):
+        if n[Attr.NAME] in kw.split():
             result.append(Message.from_node(
                 message_id="E004",
-                message=f"Unexpected keyword '{n['name']}'",
-                node=n, ast=ast
+                message=f"Unexpected keyword '{n[Attr.NAME]}'",
+                node=n
             ))
 
-    return check(ast, lambda n: n[Attr.NODE_TYPE].startswith("ref"), body)
+    return check(ast, is_(Ref, RefLink, RefExt), body)
 
 
-def check_spawn(ast: dict) -> List[Message]:
-    if "spawn" not in ast["system"]:
+def check_spawn(ast: Root) -> List[Message]:
+    spawn = ast["system"][Attr.SPAWN]
+    if not spawn:
         return [Message.from_node(
             message_id="E005",
             message="Missing 'spawn' in 'system'",
-            node=ast["system"], ast=ast
+            node=ast["system"]
         )]
     # TODO try and check spawns that evaluate to 0
 
 
 def check_externs(ast: dict) -> List[Message]:
     try:
-        defined_exts = ast["system"]["extern"]["extern"]
+        defined_exts = {x[Attr.NAME]: x for x in ast["system"]["extern"]}
     except KeyError:
         defined_exts = []
 
-    def body(n, ast, result):
-        if n["name"] not in defined_exts:
+    uses = Counter()
+
+    def body(n, result):
+        uses[n[Attr.NAME]] += 1
+        if n[Attr.NAME] not in defined_exts:
             result.append(Message.from_node(
                 message_id="E006",
-                message=f"Undefined extern '{n['name']}'",
+                message=f"Undefined extern '{n[Attr.NAME]}'",
                 node=n))
-    return check(ast, lambda n: n[Attr.NODE_TYPE] == "ext", body)
+
+    result = check(ast, is_(RefExt), body)
+    result.extend(
+        Message.from_node(
+            message_id="W001",
+            message=f"Unused extern '{n}'",
+            node=defined_exts[n]
+        )
+        for n in uses if n in defined_exts and uses[n] <= 1
+    )
+    return result
 
 
 def check_builtins(ast: dict) -> List[Message]:
@@ -87,9 +109,9 @@ def check_builtins(ast: dict) -> List[Message]:
         **{op: 2 for op in ("max", "min", ">=", "<=", ">", "<", "=", "!=")}
     }
 
-    def body(n, _, result):
+    def body(n, result):
         expected = arities.get(n[Attr.NAME])
-        got = len(n.get(Attr.OPERANDS, []))
+        got = len(n[Attr.OPERANDS])
         if expected is not None and expected != got:
             where = n
             if expected < got:
@@ -102,7 +124,7 @@ def check_builtins(ast: dict) -> List[Message]:
                     f"Wrong arity for '{n[Attr.NAME]}' "
                     f"(expected {expected}, got {got})"),
                 node=where))
-    return check(ast, lambda n: n in NodeType.BUILTIN or n in NodeType.EXPR, body)  # noqa: E501
+    return check(ast, is_(Builtin, Expr), body)
 
 
 def run(ast: dict) -> List[Message]:
@@ -110,7 +132,10 @@ def run(ast: dict) -> List[Message]:
         tasks = wait(
             executor.submit(fn, ast)
             for fn in (
-                check_spawn, check_assign, check_ref, check_externs,
+                check_spawn,
+                check_assign,
+                check_ref,
+                check_externs,
                 check_builtins
             )
         )
