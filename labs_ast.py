@@ -329,6 +329,11 @@ class RefExt(Node):
     __slots__ = (Attr.NAME,)
     AS_NODETYPE = NodeType.REF_EXT
 
+    def __init__(self, path, ln, col, toks) -> None:
+        super().__init__(path, ln, col, toks)
+        self[Attr.NAME] = toks[0][Attr.NAME]
+        self[Attr.NAME] = f"_{self[Attr.NAME]}"
+
 
 class RefLink(Node):
     __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET

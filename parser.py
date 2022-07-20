@@ -88,7 +88,7 @@ VARNAME = Word(alphas.lower(), alphanums + "_")
 IDENTIFIER = Word(alphas.upper(), alphanums + "_")
 EXTERN = Combine(
     Literal("_") + VARNAME(Attr.NAME)
-)(NodeType.REF_EXT).setParseAction(lambda s, loc, t: make_node(s, loc, t[0]))
+)(NodeType.REF_EXT).setParseAction(make_node)
 
 
 def named_list(name, thing, sep=SEMICOLON):
@@ -138,16 +138,16 @@ def makeExprParsers(pvarrefMaker):
             Keyword("if").suppress() + bexpr(Attr.CONDITION) +
             Keyword("then").suppress() + expr(Attr.THEN) +
             Keyword("else").suppress() + expr(Attr.ELSE)
-        )(NodeType.IF) |
-        ppc.signed_integer("literal-int") |
-        raw_fn_call(NodeType.RAW_CALL) |
+        )(NodeType.IF).setParseAction(make_node) |
+        ppc.signed_integer("literal-int").setParseAction(make_node) |
+        raw_fn_call(NodeType.RAW_CALL).setParseAction(make_node) |
         (
             BUILTIN(Attr.NAME) + LPAR +
             Optional(delimitedList(expr)(Attr.OPERANDS)) + RPAR
-        )(NodeType.BUILTIN) |  # noqa: E501
-        var_ref |
-        EXTERN
-    ).setParseAction(make_node)
+        )(NodeType.BUILTIN).setParseAction(make_node) |  # noqa: E501
+        var_ref.setParseAction(make_node) |
+        EXTERN.setParseAction(make_node)
+    )
 
     expr <<= infixNotation(expr_atom, [
         ("-", 1, opAssoc.RIGHT, make_node),
