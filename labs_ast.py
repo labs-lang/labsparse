@@ -76,6 +76,7 @@ class NodeType(StringEnum):
     RAW_CALL = auto()
     REF = auto()
     REF_LINK = auto()
+    ROOT = auto()
     SPAWN_DECLARATION = auto()
     STIGMERGY = auto()
     SYSTEM = auto()
@@ -101,6 +102,13 @@ class Node:
         lookup[Attr.VARIABLE] = Ref
 
         return lookup[node_type](path, ln, col, toks)
+
+    @staticmethod
+    def make_root(system, agents, stigmergies, assume, check):
+        return Root(
+            system[Attr.PATH], system[Attr.LN], system[Attr.COL],
+            system, agents, stigmergies, assume, check)
+
 
     def walk(self):
         yield self
@@ -323,6 +331,23 @@ class RefExt(Node):
 class RefLink(Node):
     __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET
     AS_NODETYPE = NodeType.REF_LINK
+
+
+class Root(Node):
+    __slots__ = "system", "agents", "stigmergies", "assume", "check"
+    AS_NODETYPE = NodeType.ROOT
+
+    def __init__(
+        self, path, ln, col, system, agents, stigmergies, assume, check
+    ):
+        self[Attr.PATH] = path
+        self[Attr.LN] = ln
+        self[Attr.COL] = col
+        self.system = system
+        self.agents = agents
+        self.stigmergies = stigmergies
+        self.assume = assume
+        self.check = check
 
 
 class SpawnDeclaration(Node):
