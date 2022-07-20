@@ -1,5 +1,21 @@
 from enum import Enum, unique, auto
-from typing import Any
+from typing import Any, Type
+
+from zmq import TYPE
+
+_NEWLINE = "\n"
+
+_SYNTAX = {
+    "choice": " ++\n",
+    "environment": "<--",
+    "interface": "<-",
+    "local": ":=",
+    "par": " ||\n",
+    "stigmergy": "<~",
+    "seq": ";\n",
+    "unary-minus": "-",
+    "unary-not": "!"
+}
 
 
 class StringEnum(str, Enum):
@@ -162,6 +178,9 @@ class Node:
                 elif self._get(attr) is None and default_empty:
                     self._set(attr, [])
 
+    def as_labs(self, indent=0) -> str:
+        return str(self)
+
     def serialize(self) -> dict:
         def handle(value):
             return value.serialize() if isinstance(value, Node) else value
@@ -183,6 +202,21 @@ class Agent(Node):
     __slots__ = Attr.INTERFACE, Attr.STIGMERGIES, Attr.PROCDEFS  # noqa: E501
     AS_NODETYPE = NodeType.AGENT
 
+    def as_labs(self, indent=0) -> str:
+        iface = ",".join(x.as_labs() for x in self[Attr.INTERFACE])
+        iface = f"{' '*(indent+2)}interface = {iface}\n" if iface else ""
+        stigs = ", ".join(self[Attr.STIGMERGIES])
+        stigs = f"{' '*(indent+2)}stigmergies = {stigs}\n" if stigs else ""
+        procdefs = "\n".join(
+            x.as_labs(indent=indent+2) for x in self[Attr.PROCDEFS])
+
+        return (
+            f"{' '*indent}agent {{\n"
+            f"{iface}{stigs}"
+            f"{procdefs}"
+            f"\n{' '*indent}}}"
+        )
+
 
 class Assign(Node):
     __slots__ = Attr.TYPE, Attr.LHS, Attr.RHS
@@ -191,6 +225,11 @@ class Assign(Node):
     def __init__(self, path, ln, col, toks) -> None:
         super().__init__(path, ln, col, toks)
         self._set(Attr.TYPE, toks[Attr.LOCATION])
+
+    def as_labs(self, indent=0) -> str:
+        lhs = ", ".join(x.as_labs() for x in self[Attr.LHS])
+        rhs = ", ".join(x.as_labs() for x in self[Attr.RHS])
+        return f"{' '*indent}{lhs} {_SYNTAX[self[Attr.TYPE]]} {rhs}"
 
 
 class Assume(Node):
@@ -206,10 +245,24 @@ class Block(Node):
         super().__init__(path, ln, col, toks)
         self._listify(Attr.BODY)
 
+    def as_labs(self, indent=0) -> str:
+        recurse = ";\n".join(
+            x.as_labs(indent=indent+2) for x in self[Attr.BODY])
+        return (
+            f"{' '*(indent)}{{\n"
+            f"{recurse}"
+            f"\n{' '*(indent)}}}"
+        )
+
 
 class Builtin(Node):
     __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.BUILTIN
+
+    def as_labs(self, indent=0) -> str:
+        fn = _SYNTAX.get(self[Attr.NAME], self[Attr.NAME])
+        args = ", ".join(x.as_labs() for x in self[Attr.OPERANDS])
+        return f"{' '*indent}{fn}({args})"
 
 
 class Call(Node):
@@ -219,6 +272,9 @@ class Call(Node):
     def __init__(self, path, ln, col, toks) -> None:
         super().__init__(path, ln, col, toks)
         self._set(Attr.NAME, toks[0])
+
+    def as_labs(self, indent=0) -> str:
+        return f"{' '*indent}{self[Attr.NAME]}"
 
 
 class Check(Node):
@@ -234,10 +290,18 @@ class Comparison(Node):
         super().__init__(path, ln, col, toks)
         self._set(Attr.OPERANDS, [toks["cmp-lhs"], toks["cmp-rhs"]])
 
+    def as_labs(self, indent=0) -> str:
+        op = f" {self[Attr.NAME]} "
+        return op.join(x.as_labs() for x in self[Attr.OPERANDS])
+
 
 class Composition(Node):
     __slots__ = (Attr.NAME, Attr.OPERANDS)
     AS_NODETYPE = NodeType.COMPOSITION
+
+    def as_labs(self, indent=0) -> str:
+        return _SYNTAX[self[Attr.NAME]].join(
+            x.as_labs(indent=indent+2) for x in self[Attr.OPERANDS])
 
 
 class Declaration(Node):
@@ -262,6 +326,10 @@ class Expr(Node):
     __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.EXPR
 
+    def as_labs(self, indent=0) -> str:
+        op = f" {self[Attr.NAME]} "
+        return op.join(x.as_labs() for x in self[Attr.OPERANDS])
+
 
 class Guarded(Node):
     __slots__ = (Attr.CONDITION, Attr.BODY)
@@ -272,15 +340,32 @@ class If(Node):
     __slots__ = Attr.CONDITION, Attr.THEN, Attr.ELSE
     AS_NODETYPE = NodeType.IF
 
+    def as_labs(self, indent=0) -> str:
+        cond = self[Attr.CONDITION].as_labs()
+        then = self[Attr.THEN].as_labs()
+        else_ = self[Attr.ELSE].as_labs()
+        return f"if {cond} then {then} else {else_}"
+
 
 class Literal(Node):
     __slots__ = Attr.TYPE, Attr.VALUE
     AS_NODETYPE = NodeType.LITERAL
 
+    def as_labs(self, indent=0) -> str:
+        if self[Attr.TYPE] == "bool":
+            return "true" if self[Attr.VALUE] else "false"
+        else:
+            return str(self[Attr.VALUE])
+
 
 class Pick(Node):
     __slots__ = Attr.TYPE, Attr.CONDITION, Attr.VALUE
     AS_NODETYPE = NodeType.PICK
+
+    def as_labs(self, indent=0) -> str:
+        where = f" where {self[Attr.CONDITION].as_labs()}" if self[Attr.CONDITION] else ""  # noqa: E501
+        type_ = f" {self[Attr.TYPE]}" if self[Attr.TYPE] else ""
+        return f"pick {self[Attr.VALUE]}{type_}{where}"
 
 
 class ProcDef(Node):
@@ -292,6 +377,12 @@ class ProcDef(Node):
         self._listify(Attr.BODY)
         self._set(Attr.BODY, self._get(Attr.BODY)[0])
 
+    def as_labs(self, indent=0) -> str:
+        return (
+            f"{' '*indent}{self[Attr.NAME]} "
+            "=\n"
+            f"{self[Attr.BODY].as_labs(indent)}")
+
 
 class PropertyDef(Node):
     __slots__ = Attr.MODALITY, Attr.CONDITION
@@ -302,10 +393,18 @@ class QFormula(Node):
     __slots__ = Attr.QVARS, Attr.CONDITION
     AS_NODETYPE = NodeType.QFORMULA
 
+    def as_labs(self, indent=0) -> str:
+        qvars = ", ".join(x.as_labs() for x in self[Attr.QVARS])
+        qvars = f"{qvars}, " if qvars else ""
+        return f"{qvars}{self[Attr.CONDITION].as_labs()}"
+
 
 class QVar(Node):
     __slots__ = Attr.NAME, Attr.TYPE, Attr.QUANTIFIER
     AS_NODETYPE = NodeType.QVAR
+
+    def as_labs(self, indent=0) -> str:
+        return f"{self[Attr.QUANTIFIER]} {self[Attr.TYPE]} {self[Attr.NAME]}"
 
 
 class RawCall(Node):
@@ -324,6 +423,14 @@ class Ref(Node):
             if val is not None:
                 self._set(attr, val[0])
 
+    def as_labs(self, indent=0) -> str:
+        result = self[Attr.NAME]
+        if self[Attr.OFFSET]:
+            result += f"[{self[Attr.OFFSET].as_labs()}]"
+        if self[Attr.OF]:
+            result = f"({result} of {self[Attr.OF].as_labs()})"
+        return result
+
 
 class RefExt(Node):
     __slots__ = (Attr.NAME,)
@@ -333,6 +440,9 @@ class RefExt(Node):
         super().__init__(path, ln, col, toks)
         self[Attr.NAME] = toks[0][Attr.NAME]
         self[Attr.NAME] = f"_{self[Attr.NAME]}"
+
+    def as_labs(self, indent=0) -> str:
+        return self[Attr.NAME]
 
 
 class RefLink(Node):
@@ -356,10 +466,20 @@ class Root(Node):
         self.assume = assume
         self.check = check
 
+    def as_labs(self, _=0) -> str:
+        return (
+f"""{self["system"].as_labs()}
+
+{_NEWLINE.join(a.as_labs() for a in self["agents"])}
+""")
+
 
 class SpawnDeclaration(Node):
     __slots__ = Attr.TYPE, Attr.VALUE
     AS_NODETYPE = NodeType.SPAWN_DECLARATION
+
+    def as_labs(self) -> str:
+        return f"{self[Attr.TYPE]}: {self[Attr.VALUE].as_labs()}"
 
 
 class Stigmergy(Node):
@@ -368,6 +488,7 @@ class Stigmergy(Node):
 
 
 class System(Node):
+    # TODO: add environment
     __slots__ = (Attr.PROCDEFS, Attr.EXTERN, Attr.SPAWN)
     AS_NODETYPE = NodeType.SYSTEM
 
@@ -376,3 +497,17 @@ class System(Node):
         for attr in self.__slots__:
             if self._get(attr) is None:
                 self._set(attr, [])
+
+    def as_labs(self, indent=0) -> str:
+        ext = ", ".join(x.as_labs() for x in self[Attr.EXTERN])
+        ext = f"{' '*(indent+2)}extern = {ext}\n"if ext else ""
+        spawn = ", ".join(x.as_labs() for x in self[Attr.SPAWN])
+        spawn = f"{' '*(indent+2)}spawn = {spawn}\n"if spawn else ""
+        procdefs = "\n".join(
+            x.as_labs(indent=indent+2) for x in self[Attr.PROCDEFS])
+
+        return (
+            f"{' '*indent}system {{\n"
+            f"{ext}{spawn}"
+            f"{procdefs}{_NEWLINE if procdefs else ''}"
+            f"{' '*indent}}}")
