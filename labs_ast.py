@@ -81,7 +81,6 @@ class NodeType(StringEnum):
     SYSTEM = auto()
     TUPLE_DECL = auto()
 
-
     def __contains__(self, __o: Any) -> bool:
         try:
             return __o[Attr.NODE_TYPE] == self
@@ -102,6 +101,22 @@ class Node:
         lookup[Attr.VARIABLE] = Ref
 
         return lookup[node_type](path, ln, col, toks)
+
+    def walk(self):
+        yield self
+        for attr in self.__slots__:
+            if isinstance(self[attr], Node):
+                yield from self[attr].walk()
+            elif isinstance(self[attr], list):
+                for x in self[attr]:
+                    if isinstance(x, Node):
+                        yield from x.walk()
+
+    def __getitem__(self, key):
+        return self._get(key)
+
+    def __setitem__(self, key, value):
+        return self._set(key, value)
 
     def __init__(self, path, ln, col, toks) -> None:
         self._set(Attr.PATH, path)
