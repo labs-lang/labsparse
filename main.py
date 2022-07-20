@@ -18,7 +18,6 @@ def print_version(flag):
     __name__ = "LAbSParse"
     __version__ = "0.1"
     if flag is not None:
-        # print("AAAA")
         typer.echo(f"{__name__} {__version__}")
         raise typer.Exit()
 

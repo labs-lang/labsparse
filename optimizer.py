@@ -1,7 +1,9 @@
 import operator
 from functools import reduce
 from inspect import signature
-from labs_ast import Builtin, Composition, Expr, Guarded, If, Literal, Node, ProcDef, Attr, NodeType
+
+from labs_ast import (Attr, Builtin, Composition, Expr, Guarded, If, Literal,
+                      Node, ProcDef)
 
 
 def evaluate(node):
