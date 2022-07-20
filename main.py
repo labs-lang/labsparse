@@ -52,7 +52,7 @@ def main(
         if dump_ast:
             dump_fn = {
                 OutputFormat.JSON: j_dump,
-                OutputFormat.LABS: sprint_labs_ast,
+                OutputFormat.LABS: lambda x: x.as_labs(),
                 OutputFormat.MASSEUR: j_dump  # TODO
             }.get(output_format, lambda _: pprint.pprint(ast, width=40))
 
