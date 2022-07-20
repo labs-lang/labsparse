@@ -1,7 +1,7 @@
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
-from parser import Attr, NodeType, walk
+from parser import Attr, NodeType
 from pathlib import Path
 from typing import Any
 

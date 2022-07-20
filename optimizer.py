@@ -3,7 +3,6 @@ from functools import reduce
 from inspect import signature
 from labs_ast import Composition, Guarded, ProcDef
 
-from parser import Attr, NodeType, walk
 
 
 def evaluate(node):

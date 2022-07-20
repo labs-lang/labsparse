@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import combinations
-from parser import Attr, NodeType, kw, walk
+from parser import Attr, NodeType, kw
 from typing import List
 
 from output import Message
