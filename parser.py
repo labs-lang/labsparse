@@ -116,8 +116,8 @@ def linkVarRefParser(pexpr):
     return (
         VARNAME(Attr.NAME) +
         Optional(offset(pexpr))(Attr.OFFSET) +
-        (Keyword(Attr.OF).suppress() + oneOfKw("1 2 c1 c2"))(Attr.OF)
-    )("ref-link")
+        ungroup(Keyword(Attr.OF).suppress() + oneOfKw("1 2 c1 c2"))(Attr.OF)
+    )(NodeType.REF_LINK)
 
 
 def makeExprParsers(pvarrefMaker):
