@@ -1,8 +1,7 @@
 import operator
 from functools import reduce
 from inspect import signature
-from labs_ast import Composition, Guarded, ProcDef
-
+from labs_ast import Builtin, Composition, Expr, Guarded, If, Literal, Node, ProcDef, Attr, NodeType
 
 
 def evaluate(node):
@@ -24,19 +23,19 @@ def evaluate(node):
         "unary-minus": operator.neg,
         "unary-not": operator.not_
     }
-    if node in NodeType.IF:
+    if isinstance(node, If):
         cond = evaluate(node[Attr.CONDITION])
-        if cond in NodeType.LITERAL and cond[Attr.TYPE] == "bool":
+        if isinstance(cond, Literal) and cond[Attr.TYPE] == "bool":
             return evaluate(
                 node[Attr.THEN]
                 if cond[Attr.VALUE]
                 else node[Attr.ELSE])
 
-    if node in NodeType.EXPR or node in NodeType.BUILTIN:
+    if isinstance(node, Expr) or isinstance(node, Builtin):
         operands = [evaluate(n) for n in node[Attr.OPERANDS]]
         literals, others = (
-            [n[Attr.VALUE] for n in operands if n in NodeType.LITERAL],
-            [n for n in operands if n not in NodeType.LITERAL])
+            [n[Attr.VALUE] for n in operands if isinstance(n, Literal)],
+            [n for n in operands if not isinstance(n, Literal)])
         fn = operators[node[Attr.NAME]]
         min_args = len(signature(fn).parameters)
         if len(literals) >= min_args:
@@ -45,21 +44,16 @@ def evaluate(node):
                 if min_args == 1
                 else reduce(fn, literals))
 
-            new_node = {
-                Attr.NODE_TYPE: NodeType.LITERAL,
-                Attr.TYPE: "bool" if isinstance(value, bool) else "int",
-                Attr.VALUE: value,
-                Attr.PATH: node[Attr.PATH],
-                Attr.LN: node[Attr.LN],
-                Attr.COL: node[Attr.COL],
-                Attr.SYNTHETIC: True
-            }
+            new = Literal(node[Attr.PATH], node[Attr.LN], node[Attr.COL], {})
+            new[Attr.VALUE] = value
+            new[Attr.TYPE] = "bool" if isinstance(value, bool) else "int"
+
             if others:
-                others.append(new_node)
+                others.append(new)
                 node[Attr.OPERANDS] = others
                 return node
             else:
-                return new_node
+                return new
     return node
 
 
@@ -81,22 +75,22 @@ def simplify(proc):
         return proc
 
 
-def fold_constants(ast):
+def fold_constants(ast: Node):
     """Performs constant folding on the given AST."""
-    for n in walk(ast):
-        for a in (Attr.OPERANDS, Attr.RHS):
-            if a in n and n not in NodeType.COMPOSITION:
-                n[a] = [evaluate(x) for x in n[a]]
-        for a in (Attr.CONDITION, Attr.THEN, Attr.ELSE):
-            if a in n:
-                n[a] = evaluate(n[a])
+    for n in ast.walk():
+        if not isinstance(n, Composition):
+            for a in (Attr.OPERANDS, Attr.RHS):
+                if hasattr(n, a):
+                    n[a] = [evaluate(x) for x in n[a]]
+            for a in (Attr.CONDITION, Attr.THEN, Attr.ELSE):
+                if hasattr(n, a):
+                    n[a] = evaluate(n[a])
 
 
-def optimize(ast, level=1):
+def optimize(ast, level=2):
     if level >= 1:
-        for a in ast["agents"]:
-            for n in a.walk():
-                if isinstance(n, ProcDef):
-                    n[Attr.BODY] = simplify(n[Attr.BODY])
+        for n in ast.walk():
+            if isinstance(n, ProcDef):
+                n[Attr.BODY] = simplify(n[Attr.BODY])
     if level >= 2:
         fold_constants(ast)
