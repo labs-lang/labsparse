@@ -3,8 +3,11 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 from parser import Attr, NodeType, walk
 from pathlib import Path
+from typing import Any
 
 import pyparsing as pp
+
+from labs_ast import Node
 
 
 class OutputFormat(Enum):
@@ -81,7 +84,13 @@ class Message:
 
 def j_dump(x):
     """Invokes `json.dumps` with reasonable arguments."""
-    return json.dumps(x, default=str, indent=4)
+    def default(o: Any) -> Any:
+        if isinstance(o, Node):
+            return o.serialize()
+        else:
+            raise ValueError(o, type(o))
+    # TODO configure indent from the CLI
+    return json.dumps(x, default=default, indent=4)
 
 
 def print_many(messages, fmt=OutputFormat.TEXT):
