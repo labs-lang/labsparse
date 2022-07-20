@@ -120,19 +120,6 @@ _SYNTAX = {
 }
 
 
-_SYNTAX = {
-    "choice": " ++\n",
-    "environment": "<--",
-    "interface": "<-",
-    "local": ":=",
-    "par": " ||\n",
-    "stigmergy": "<~",
-    "seq": ";\n",
-    "unary-minus": "-",
-    "unary-not": "!"
-}
-
-
 def sprint_labs(n, indent=""):
     def up_indent():
         return indent + "  "
