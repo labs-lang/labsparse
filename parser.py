@@ -63,7 +63,7 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
     elif ast_type in "+-*/%:" or ast_type in ("and", "or"):
         toks[Attr.NAME] = ast_type
         toks[Attr.OPERANDS] = toks[0][0::2]
-        ast_type = NodeType.BUILTIN
+        ast_type = NodeType.EXPR
     elif ast_type.startswith("literal-"):
         toks[Attr.TYPE] = ast_type.split("-")[-1]
         fn = {"int": int, "bool": bool}.get(toks[Attr.TYPE], lambda x: x)
