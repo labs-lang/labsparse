@@ -1,6 +1,7 @@
 import operator
 from functools import reduce
 from inspect import signature
+from labs_ast import Composition, Guarded, ProcDef
 
 from parser import Attr, NodeType, walk
 
@@ -65,21 +66,18 @@ def evaluate(node):
 
 def simplify(proc):
     """Simplifies a LAbS process tree."""
-    if isinstance(proc, dict):
-        if proc in NodeType.COMPOSITION:
-            if len(proc[Attr.OPERANDS]) == 1:
-                return simplify(proc[Attr.OPERANDS][0])
-            else:
-                proc[Attr.OPERANDS] = [
-                    simplify(p)
-                    for p in proc[Attr.OPERANDS]
-                ]
-                return proc
-        elif proc in NodeType.GUARDED:
-            proc[Attr.BODY] = simplify(proc[Attr.BODY])
-            return proc
+    if isinstance(proc, Composition):
+        if len(proc[Attr.OPERANDS]) == 1:
+            return simplify(proc[Attr.OPERANDS][0])
         else:
+            proc[Attr.OPERANDS] = [
+                simplify(p)
+                for p in proc[Attr.OPERANDS]
+            ]
             return proc
+    elif isinstance(proc, Guarded):
+        proc[Attr.BODY] = simplify(proc[Attr.BODY])
+        return proc
     else:
         return proc
 
@@ -95,9 +93,11 @@ def fold_constants(ast):
                 n[a] = evaluate(n[a])
 
 
-def optimize(ast, level=2):
+def optimize(ast, level=1):
     if level >= 1:
-        for n in (n for n in walk(ast) if n in NodeType.PROCDEF):
-            n[Attr.BODY] = simplify(n[Attr.BODY])
+        for a in ast["agents"]:
+            for n in a.walk():
+                if isinstance(n, ProcDef):
+                    n[Attr.BODY] = simplify(n[Attr.BODY])
     if level >= 2:
         fold_constants(ast)
