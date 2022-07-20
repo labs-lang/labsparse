@@ -211,7 +211,8 @@ class Call(Node):
         self._set(Attr.NAME, toks[0])
 
 
-class Check(Assume, Node):
+class Check(Node):
+    __slots__ = (Attr.PROPERTIES,)
     AS_NODETYPE = NodeType.CHECK
 
 
@@ -247,7 +248,8 @@ class TupleDeclaration(Node):
         self._listify(*self.__slots__)
 
 
-class Expr(Builtin, Node):
+class Expr(Node):
+    __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.EXPR
 
 
@@ -296,7 +298,8 @@ class QVar(Node):
     AS_NODETYPE = NodeType.QVAR
 
 
-class RawCall(Builtin, Node):
+class RawCall(Node):
+    __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.RAW_CALL
 
 
@@ -312,15 +315,18 @@ class Ref(Node):
                 self._set(attr, val[0])
 
 
-class RefExt(Call, Node):
+class RefExt(Node):
+    __slots__ = (Attr.NAME,)
     AS_NODETYPE = NodeType.REF_EXT
 
 
-class RefLink(Ref, Node):
+class RefLink(Node):
+    __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET
     AS_NODETYPE = NodeType.REF_LINK
 
 
-class SpawnDeclaration(Literal, Node):
+class SpawnDeclaration(Node):
+    __slots__ = Attr.TYPE, Attr.VALUE
     AS_NODETYPE = NodeType.SPAWN_DECLARATION
 
 
