@@ -267,7 +267,7 @@ SYSTEM = (
 ).setParseAction(make_node)
 
 TUPLEDEF = (
-    delimitedList(VARNAME)(Attr.VARIABLE) + COLON +
+    delimitedList(LHS)(Attr.VARIABLE) + COLON +
     delimitedList(INITIALIZER)(Attr.VALUE)
 )(NodeType.TUPLE_DECL).setParseAction(make_node)
 
