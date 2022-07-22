@@ -203,7 +203,7 @@ class Agent(Node):
     AS_NODETYPE = NodeType.AGENT
 
     def as_labs(self, indent=0) -> str:
-        iface = ",".join(x.as_labs() for x in self[Attr.INTERFACE])
+        iface = ", ".join(x.as_labs() for x in self[Attr.INTERFACE])
         iface = f"{' '*(indent+2)}interface = {iface}\n" if iface else ""
         stigs = ", ".join(self[Attr.STIGMERGIES])
         stigs = f"{' '*(indent+2)}stigmergies = {stigs}\n" if stigs else ""
@@ -211,7 +211,7 @@ class Agent(Node):
             x.as_labs(indent=indent+2) for x in self[Attr.PROCDEFS])
 
         return (
-            f"{' '*indent}agent {{\n"
+            f"\n{' '*indent}agent {self[Attr.NAME]} {{\n"
             f"{iface}{stigs}"
             f"{procdefs}"
             f"\n{' '*indent}}}"
@@ -260,9 +260,14 @@ class Builtin(Node):
     AS_NODETYPE = NodeType.BUILTIN
 
     def as_labs(self, indent=0) -> str:
-        fn = _SYNTAX.get(self[Attr.NAME], self[Attr.NAME])
-        args = ", ".join(x.as_labs() for x in self[Attr.OPERANDS])
-        return f"{' '*indent}{fn}({args})"
+        if self[Attr.NAME] == "nondet-from-range":
+            return f"{self[Attr.OPERANDS][0].as_labs()}..{self[Attr.OPERANDS][1].as_labs()}"  # noqa: E501
+        elif self[Attr.NAME] == "nondet-from-list":
+            return f'[{", ".join(x.as_labs() for x in self[Attr.OPERANDS])}]'
+        else:
+            fn = _SYNTAX.get(self[Attr.NAME], self[Attr.NAME])
+            args = ", ".join(x.as_labs() for x in self[Attr.OPERANDS])
+            return f"{' '*indent}{fn}({args})"
 
 
 class Call(Node):
@@ -312,6 +317,9 @@ class Declaration(Node):
         super().__init__(path, ln, col, toks)
         setattr(self, Attr.VALUE, toks[1])
 
+    def as_labs(self, indent=0) -> str:
+        return f"{self[Attr.VARIABLE].as_labs()}: {self[Attr.VALUE].as_labs()}"
+
 
 class TupleDeclaration(Node):
     __slots__ = Attr.VARIABLE, Attr.VALUE
@@ -320,6 +328,11 @@ class TupleDeclaration(Node):
     def __init__(self, path, ln, col, toks) -> None:
         super().__init__(path, ln, col, toks)
         self._listify(*self.__slots__)
+
+    def as_labs(self, indent=0) -> str:
+        varz = ", ".join(x.as_labs() for x in self[Attr.VARIABLE])
+        inits = ", ".join(x.as_labs() for x in self[Attr.VALUE])
+        return f"{varz}: {inits}"
 
 
 class Expr(Node):
@@ -469,7 +482,7 @@ class Root(Node):
     def as_labs(self, _=0) -> str:
         return (
 f"""{self["system"].as_labs()}
-
+{_NEWLINE.join(a.as_labs() for a in self["stigmergies"])}
 {_NEWLINE.join(a.as_labs() for a in self["agents"])}
 """)
 
@@ -486,6 +499,15 @@ class Stigmergy(Node):
     __slots__ = Attr.CONDITION, Attr.NAME, Attr.TUPLES
     AS_NODETYPE = NodeType.STIGMERGY
 
+    def as_labs(self, indent=0) -> str:
+        tuples = [x.as_labs() for x in self[Attr.TUPLES]]
+        tuples = ('\n'+(' '*(indent+2))).join(tuples)
+        return (
+            f"\n{' '*indent}stigmergy {self[Attr.NAME]} {{\n"
+            f"{' '*(indent+2)}link = {self[Attr.CONDITION].as_labs()}"
+            f"{tuples}"
+            f"\n{' '*indent}}}"
+        )
 
 class System(Node):
     # TODO: add environment
