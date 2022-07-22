@@ -199,7 +199,7 @@ class Node:
 
 
 class Agent(Node):
-    __slots__ = Attr.INTERFACE, Attr.STIGMERGIES, Attr.PROCDEFS  # noqa: E501
+    __slots__ = Attr.NAME, Attr.INTERFACE, Attr.STIGMERGIES, Attr.PROCDEFS  # noqa: E501
     AS_NODETYPE = NodeType.AGENT
 
     def as_labs(self, indent=0) -> str:
