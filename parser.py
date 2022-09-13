@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import pyparsing as pp
-from pyparsing import (Combine, FollowedBy, Forward, Group, Keyword, Literal,
-                       OneOrMore, Optional, ParserElement, Suppress, Word,
-                       ZeroOrMore, alphanums, alphas, delimitedList,
-                       infixNotation, oneOf, opAssoc)
+from pyparsing import (Combine, FollowedBy, Forward, Keyword, Literal,
+                       OneOrMore, Optional, ParserElement, ParseResults,
+                       Suppress, Word, ZeroOrMore, alphanums, alphas,
+                       delimitedList, infixNotation, oneOf, opAssoc)
 from pyparsing import pyparsing_common as ppc
 from pyparsing import pythonStyleComment, ungroup
 
-from labs_ast import Attr, NodeType, Node
+from labs_ast import Attr, Node, NodeType
 
 ParserElement.enablePackrat()
 
@@ -42,46 +42,52 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
         dict: An AST node
     """
     _t = toks.asDict()
+    unary_ops = {"-": "unary-minus", "!": "unary-not"}
 
     try:
         ast_type = toks.getName() or toks[0][1]
-        if isinstance(ast_type, Node):
+        if isinstance(ast_type, Node) and toks[0][0] not in unary_ops:
             return ast_type
     except (KeyError, TypeError):
         return toks[0]
 
-    unary_ops = {"-": "unary-minus", "!": "unary-not"}
-
-    if isinstance(ast_type, dict) and toks[0][0] in unary_ops:
-        toks[Attr.NAME] = unary_ops[toks[0][0]]
-        toks[Attr.OPERANDS] = [toks[0][1]]
-        ast_type = NodeType.BUILTIN
-    elif ast_type in ("seq", "choice", "par"):
-        toks[Attr.NAME] = ast_type
-        toks[Attr.OPERANDS] = _t[ast_type]
-        ast_type = NodeType.COMPOSITION
-    elif ast_type in "+-*/%:" or ast_type in ("and", "or"):
-        toks[Attr.NAME] = ast_type
-        toks[Attr.OPERANDS] = toks[0][0::2]
-        ast_type = NodeType.EXPR
-    elif ast_type.startswith("literal-"):
-        toks[Attr.TYPE] = ast_type.split("-")[-1]
-        fn = {"int": int, "bool": bool}.get(toks[Attr.TYPE], lambda x: x)
-        toks[Attr.VALUE] = fn(toks[ast_type])
-        ast_type = NodeType.LITERAL
-    elif ast_type.startswith("init-"):
-        toks[Attr.NAME] = ast_type.replace("init", "nondet-from")
-        toks[Attr.OPERANDS] = {
-            "init-list": lambda t: t.asList(),
-            "init-range": lambda t: [t[0], t[1]],
-            "init-value": lambda t: t["init-value"]
-        }[ast_type](toks)
-        ast_type = NodeType.BUILTIN
     try:
+        if len(toks) == 0:
+            pass
+        elif isinstance(toks[0], ParseResults) and toks[0][0] in unary_ops:
+            toks[Attr.NAME] = unary_ops[toks[0][0]]
+            toks[Attr.OPERANDS] = [toks[0][1]]
+            ast_type = NodeType.BUILTIN
+        elif ast_type in ("seq", "choice", "par"):
+            toks[Attr.NAME] = ast_type
+            toks[Attr.OPERANDS] = _t[ast_type]
+            ast_type = NodeType.COMPOSITION
+        elif ast_type in "+-*/%:" or ast_type in ("and", "or"):
+            toks[Attr.NAME] = ast_type
+            toks[Attr.OPERANDS] = toks[0][0::2]
+            ast_type = NodeType.EXPR
+        elif ast_type.startswith("literal-"):
+            toks[Attr.TYPE] = ast_type.split("-")[-1]
+            fn = {"int": int, "bool": bool}.get(toks[Attr.TYPE], lambda x: x)
+            toks[Attr.VALUE] = fn(toks[ast_type])
+            ast_type = NodeType.LITERAL
+        elif ast_type.startswith("init-"):
+            toks[Attr.NAME] = ast_type.replace("init", "nondet-from")
+            toks[Attr.OPERANDS] = {
+                "init-list": lambda t: t.asList(),
+                "init-range": lambda t: [t[0], t[1]],
+                "init-value": lambda t: t["init-value"]
+            }[ast_type](toks)
+            ast_type = NodeType.BUILTIN
+        
         return (Node.factory(
             _path, pp.lineno(loc, s), pp.col(loc, s), ast_type, toks))
-    except Exception:
+    except KeyError:
         return toks
+    ### For debugging:
+    # except Exception as e:
+    #     print(type(e), e, pp.lineno(loc, s), pp.col(loc, s))
+    #     return toks
 
 
 VARNAME = Word(alphas.lower(), alphanums + "_")
@@ -139,7 +145,7 @@ def makeExprParsers(pvarrefMaker):
             Keyword("then").suppress() + expr(Attr.THEN) +
             Keyword("else").suppress() + expr(Attr.ELSE)
         )(NodeType.IF).setParseAction(make_node) |
-        ppc.signed_integer("literal-int").setParseAction(make_node) |
+        ppc.integer.setResultsName("literal-int").setParseAction(make_node) |
         raw_fn_call(NodeType.RAW_CALL).setParseAction(make_node) |
         (
             BUILTIN(Attr.NAME) + LPAR +
@@ -313,7 +319,7 @@ FILE = (
     ZeroOrMore(STIGMERGY)("stigmergies") +
     OneOrMore(AGENT)("agents") +
     Optional(ASSUME(NodeType.ASSUME)) +
-    CHECK("check")
+    CHECK(NodeType.CHECK)
 ).ignore(pythonStyleComment)
 
 
@@ -321,6 +327,7 @@ def parse_to_dict(path) -> dict:
     global _path
     _path = str(path)
     with open(path) as fp:
+        # p = FILE.setDebug().parseFile(fp, parseAll=True)
         p = FILE.parseFile(fp, parseAll=True)
     return Node.make_root(
         p.system,

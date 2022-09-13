@@ -90,7 +90,7 @@ def fold_constants(ast: Node):
                     n[a] = evaluate(n[a])
 
 
-def optimize(ast, level=2):
+def optimize(ast, level=1):
     if level >= 1:
         for n in ast.walk():
             if isinstance(n, ProcDef):

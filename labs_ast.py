@@ -3,6 +3,7 @@ from typing import Any, Type
 
 from zmq import TYPE
 
+
 _NEWLINE = "\n"
 
 _SYNTAX = {
@@ -149,7 +150,7 @@ class Node:
             try:
                 attr = Attr(x)
                 self._set(x, toks.get(attr))
-            except (KeyError, ValueError):
+            except (KeyError, ValueError, IndexError):
                 continue
         self._listify(
             Attr.EXTERN,
@@ -180,6 +181,13 @@ class Node:
 
     def as_labs(self, indent=0) -> str:
         return str(self)
+
+    def _as_labs_defs(self, attr, indent=0, wrapper=None):
+        things = "\n".join(x.as_labs(indent=indent+2) for x in self[attr])
+        if wrapper:
+            return f"\n{' '*(indent)}{wrapper}{{\n{things}\n{' '*(indent)}}}"
+        else:
+            return things
 
     def serialize(self) -> dict:
         def handle(value):
@@ -236,6 +244,9 @@ class Assume(Node):
     __slots__ = (Attr.PROPERTIES,)
     AS_NODETYPE = NodeType.ASSUME
 
+    def as_labs(self, indent=0) -> str:
+        return self._as_labs_defs(Attr.PROPERTIES, indent, "assume")
+
 
 class Block(Node):
     __slots__ = (Attr.BODY,)
@@ -284,7 +295,10 @@ class Call(Node):
 
 class Check(Node):
     __slots__ = (Attr.PROPERTIES,)
-    AS_NODETYPE = NodeType.CHECK
+    AS_NODETYPE = NodeType.CHECK        
+
+    def as_labs(self, indent=0) -> str:
+        return self._as_labs_defs(Attr.PROPERTIES, indent, "check")
 
 
 class Comparison(Node):
@@ -398,8 +412,16 @@ class ProcDef(Node):
 
 
 class PropertyDef(Node):
-    __slots__ = Attr.MODALITY, Attr.CONDITION
+
+    __slots__ = Attr.NAME, Attr.MODALITY, Attr.CONDITION
     AS_NODETYPE = NodeType.PROPERTY_DEF
+
+    def as_labs(self, indent=0) -> str:
+        mod = f" {self[Attr.MODALITY]}" if self[Attr.MODALITY] else ""
+        return (
+            f"{' '*indent}{self[Attr.NAME]} "
+            f"={mod} "
+            f"{self[Attr.CONDITION].as_labs()}")
 
 
 class QFormula(Node):
@@ -462,6 +484,15 @@ class RefLink(Node):
     __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET
     AS_NODETYPE = NodeType.REF_LINK
 
+    def as_labs(self, indent=0) -> str:
+        result = self[Attr.NAME]
+        if self[Attr.OFFSET]:
+            result += f"[{self[Attr.OFFSET].as_labs()}]"
+        if self[Attr.OF]:
+            of = self[Attr.OF].replace("c", "")
+            result = f"({result} of {of})"
+        return result
+
 
 class Root(Node):
     __slots__ = "system", "agents", "stigmergies", "assume", "check"
@@ -484,6 +515,7 @@ class Root(Node):
 f"""{self["system"].as_labs()}
 {_NEWLINE.join(a.as_labs() for a in self["stigmergies"])}
 {_NEWLINE.join(a.as_labs() for a in self["agents"])}
+{self["assume"].as_labs() if self["assume"] else ""}{self["check"].as_labs()}
 """)
 
 
