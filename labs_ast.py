@@ -1,7 +1,4 @@
 from enum import Enum, unique, auto
-from typing import Any, Type
-
-from zmq import TYPE
 from typing import Any
 
 
@@ -419,7 +416,7 @@ class Call(Node):
 
 class Check(Node):
     __slots__ = (Attr.PROPERTIES,)
-    AS_NODETYPE = NodeType.CHECK        
+    AS_NODETYPE = NodeType.CHECK
 
     def as_labs(self, indent=0) -> str:
         return self._as_labs_defs(Attr.PROPERTIES, indent, "check")
