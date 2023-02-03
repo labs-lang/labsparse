@@ -501,6 +501,8 @@ class Guarded(Node):
     __slots__ = (Attr.CONDITION, Attr.BODY)
     AS_NODETYPE = NodeType.GUARDED
 
+    def as_labs(self, indent=0) -> str:
+        return f"{self[Attr.CONDITION].as_labs()} ->\n  {self[Attr.BODY].as_labs(indent+2)}"  # noqa: E501
 
     def as_msur(self) -> str:
         return f"( #guard {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"
