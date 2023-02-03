@@ -2,6 +2,7 @@ from enum import Enum, unique, auto
 from typing import Any, Type
 
 from zmq import TYPE
+from typing import Any
 
 
 _NEWLINE = "\n"
