@@ -1,9 +1,10 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import combinations
-from labs_ast import Builtin, Expr, Node, Ref, RefExt, RefLink, Assign, Root
 from typing import List
 
+from labs_ast import (Assign, Builtin, Expr, Node, Ref, RefExt, RefLink, Root,
+                      is_)
 from labs_parser import Attr, NodeType, kw
 from output import Message
 
@@ -15,12 +16,6 @@ def check(ast, filter_fn, body) -> List[Message]:
         body(n, result)
 
     return result
-
-
-def is_(*node_classes):
-    def fn(node):
-        return any((isinstance(node, c) for c in node_classes))
-    return fn
 
 
 def check_assign(ast: Node) -> List[Message]:

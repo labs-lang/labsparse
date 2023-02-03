@@ -106,6 +106,11 @@ class NodeType(StringEnum):
             return False
 
 
+def is_(*node_classes):
+    def fn(node):
+        return any((isinstance(node, c) for c in node_classes))
+    return fn
+
 class Node:
     __slots__ = Attr.PATH, Attr.LN, Attr.COL, Attr.SYNTHETIC
     AS_NODETYPE = None
