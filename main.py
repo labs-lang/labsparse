@@ -53,13 +53,12 @@ def main(
             dump_fn = {
                 OutputFormat.JSON: j_dump,
                 OutputFormat.LABS: lambda x: x.as_labs(),
-                OutputFormat.MASSEUR: j_dump  # TODO
+                OutputFormat.MASSEUR: lambda x: x.as_msur()  # TODO
             }.get(output_format, lambda _: pprint.pprint(ast, width=40))
 
             result = dump_fn(ast)
             if isinstance(result, str):
                 print(result)
-            # print(dump_fmt)
             raise typer.Exit()
 
         messages = run(ast)
