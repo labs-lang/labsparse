@@ -2,9 +2,9 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
 from itertools import combinations
 from labs_ast import Builtin, Expr, Node, Ref, RefExt, RefLink, Assign, Root
-from parser import Attr, NodeType, kw
 from typing import List
 
+from labs_parser import Attr, NodeType, kw
 from output import Message
 
 

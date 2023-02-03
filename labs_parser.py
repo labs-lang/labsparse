@@ -79,7 +79,7 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
                 "init-value": lambda t: t["init-value"]
             }[ast_type](toks)
             ast_type = NodeType.BUILTIN
-        
+
         return (Node.factory(
             _path, pp.lineno(loc, s), pp.col(loc, s), ast_type, toks))
     except KeyError:
@@ -169,7 +169,7 @@ def makeExprParsers(pvarrefMaker):
     bexpr_atom = (
         oneOfKw("true false")("literal-bool") |
         (expr("cmp-lhs") + ungroup(bop)(Attr.NAME) + expr("cmp-rhs"))(NodeType.COMPARISON) ^  # noqa: E501
-        expr
+        expr("cmp-lhs")
     ).setParseAction(make_node)
 
     bexpr <<= infixNotation(bexpr_atom, [
@@ -268,7 +268,7 @@ SYSTEM = (
             )(NodeType.SPAWN_DECLARATION).setParseAction(make_node),
             COMMA))
     ) +
-    ZeroOrMore(PROCDEF)(Attr.OPERANDS) +
+    ZeroOrMore(PROCDEF)(Attr.PROCDEFS) +
     RBRACE
 ).setParseAction(make_node)
 
@@ -289,7 +289,7 @@ STIGMERGY = (
 AGENT = (
     Keyword("agent").suppress() + IDENTIFIER(Attr.NAME) +
     LBRACE + (
-        Optional(named_list("interface", DECLARATION))  # noqa: E501
+        Optional(named_list("interface", DECLARATION))
         & Optional(named_list("stigmergies", IDENTIFIER))) +
     ZeroOrMore(PROCDEF)(Attr.PROCDEFS) +
     RBRACE

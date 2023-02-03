@@ -2,7 +2,7 @@
 
 import pprint
 from optimizer import optimize
-from parser import parse_to_dict
+from labs_parser import parse_to_dict
 from pathlib import Path
 from sys import stderr
 from typing import Optional
