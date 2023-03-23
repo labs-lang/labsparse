@@ -56,7 +56,7 @@ class Attr(StringEnum):
     NAME = auto()
     SYNTHETIC = auto()
 
-    BODY = auto()           # block, procdef
+    BODY = auto()           # block, guarded, procdef
     PROCDEFS = auto()       # system, agent
     OPERANDS = auto()       # arithmetic, composition, comparison
     CONDITION = auto()      # if, guarded, pick, property, qformula
@@ -154,15 +154,36 @@ class Node:
             system[Attr.PATH], system[Attr.LN], system[Attr.COL],
             system, agents, stigmergies, assume, check)
 
-    def walk(self):
+    def matches(self, node_type):
+        return self.AS_NODETYPE == node_type
+
+    def lookup(self, _):
+        raise NotImplementedError(f"Cannot lookup from node {self}")
+
+    def collect_variables(self):
+        raise NotImplementedError(f"Invalid call: {self}.collect_variables()")
+
+    def try_lookup(self, name):
+        try:
+            return self.lookup(name)
+        except KeyError:
+            return None
+
+    def walk(self, do_not_visit=None):
         yield self
         for attr in self.__slots__:
             if isinstance(self[attr], Node):
-                yield from self[attr].walk()
+                if do_not_visit:
+                    if any(self[attr].matches(x) for x in do_not_visit):
+                        continue
+                yield from self[attr].walk(do_not_visit)
             elif isinstance(self[attr], list):
                 for x in self[attr]:
                     if isinstance(x, Node):
-                        yield from x.walk()
+                        if do_not_visit:
+                            if any(x.matches(y) for y in do_not_visit):
+                                continue
+                        yield from x.walk(do_not_visit)
 
     def __getitem__(self, key):
         return self._get(key)
@@ -278,6 +299,13 @@ class Agent(Node):
             ")"
         )
 
+    def lookup(self, name):
+        lookup = [p for p in self[Attr.PROCDEFS] if p[Attr.NAME] == name]
+        if lookup:
+            return lookup[0]
+        else:
+            raise KeyError(f"{name} not found in {self}")
+
 
 class Assign(Node):
     __slots__ = Attr.TYPE, Attr.LHS, Attr.RHS
@@ -318,6 +346,11 @@ class Assign(Node):
         lhs = maybe_list([x.as_msur() for x in lhs])
         rhs = maybe_list([x.as_msur() for x in rhs])
         return result + f"( {_SYNTAX_MSUR[self[Attr.TYPE]]} {lhs} {rhs} {stigmergy_refs} )"
+
+    def collect_variables(self):
+        return (
+            self[Attr.LHS].collect_operands |
+            self[Attr.RHS].collect_operands)
 
 
 class Assume(Node):
@@ -398,6 +431,9 @@ class Builtin(Node):
             # TODO
             return f"({self[Attr.NAME]} {' '.join(x.as_msur() for x in self[Attr.OPERANDS])})"  # noqa: E501
 
+    def collect_variables(self):
+        return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
+
 
 class Call(Node):
     __slots__ = (Attr.NAME,)
@@ -412,6 +448,9 @@ class Call(Node):
 
     def as_msur(self, indent=0) -> str:
         return f"( #call {self[Attr.NAME]} )"
+
+    def collect_variables(self):
+        return set.empty()
 
 
 class Check(Node):
@@ -438,6 +477,9 @@ class Comparison(Node):
         op = _SYNTAX_MSUR.get(self[Attr.NAME], self[Attr.NAME])
         return f"( {op} {' '.join(x.as_msur() for x in self[Attr.OPERANDS])} )"
 
+    def collect_variables(self):
+        return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
+
 
 class Composition(Node):
     __slots__ = (Attr.NAME, Attr.OPERANDS)
@@ -450,6 +492,9 @@ class Composition(Node):
     def as_msur(self):
         items = " ".join(x.as_msur() for x in self[Attr.OPERANDS])
         return f"( #{self[Attr.NAME]} {items} )"
+
+    def collect_variables(self):
+        return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
 
 
 class Declaration(Node):
@@ -494,6 +539,9 @@ class Expr(Node):
         op = _SYNTAX_MSUR.get(self[Attr.NAME], self[Attr.NAME])
         return f"( {op} {operands} )"
 
+    def collect_variables(self):
+        return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
+
 
 class Guarded(Node):
     __slots__ = (Attr.CONDITION, Attr.BODY)
@@ -503,7 +551,10 @@ class Guarded(Node):
         return f"{self[Attr.CONDITION].as_labs()} ->\n  {self[Attr.BODY].as_labs(indent+2)}"  # noqa: E501
 
     def as_msur(self) -> str:
-        return f"( #guard {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"
+        return f"( #guard {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"  # noqa: E501
+
+    def collect_variables(self):
+        return set.union(self[x].collect_variables() for x in self.__slots__)
 
 
 class If(Node):
@@ -522,6 +573,9 @@ class If(Node):
         else_ = self[Attr.ELSE].as_msur()
         return f"( #if-else {cond} {then} {else_})"
 
+    def collect_variables(self):
+        return set.union(self[x].collect_variables() for x in self.__slots__)
+
 
 class Literal(Node):
     __slots__ = Attr.TYPE, Attr.VALUE
@@ -538,6 +592,9 @@ class Literal(Node):
             return "#t" if self[Attr.VALUE] else "#f"
         else:
             return str(self[Attr.VALUE])
+
+    def collect_variables(self):
+        return set()
 
 
 class Pick(Node):
@@ -572,6 +629,9 @@ class ProcDef(Node):
 
     def as_msur(self) -> str:
         return f"( #def {self[Attr.NAME]} {self[Attr.BODY].as_msur()} )"
+
+    def collect_variables(self):
+        return self[Attr.BODY].collect_variables()
 
 
 class PropertyDef(Node):
@@ -618,6 +678,9 @@ class RawCall(Node):
     __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.RAW_CALL
 
+    def collect_variables(self):
+        return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
+
 
 class Ref(Node):
     __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET
@@ -646,6 +709,9 @@ class Ref(Node):
             result = f"( #var-of {result} {self[Attr.OF].as_msur()})"
         return result
 
+    def collect_variables(self):
+        return set.union(self[x].collect_variables() for x in self.__slots__)
+
 
 class RefExt(Node):
     __slots__ = (Attr.NAME,)
@@ -662,6 +728,9 @@ class RefExt(Node):
     def as_msur(self) -> str:
         return self[Attr.NAME]
 
+    def collect_variables(self):
+        return set()
+
 
 class RefLink(Node):
     __slots__ = Attr.NAME, Attr.OF, Attr.OFFSET
@@ -675,6 +744,9 @@ class RefLink(Node):
             of = self[Attr.OF].replace("c", "")
             result = f"({result} of {of})"
         return result
+
+    def collect_variables(self):
+        return set.union(self[x].collect_variables() for x in self.__slots__)
 
 
 class Root(Node):
@@ -748,6 +820,7 @@ class Stigmergy(Node):
             f"\n{' '*indent}}}"
         )
 
+
 class System(Node):
     # TODO: add environment
     __slots__ = (Attr.PROCDEFS, Attr.EXTERN, Attr.SPAWN)
@@ -782,3 +855,10 @@ class System(Node):
         return (
 f"""{params}( #system {spawn} )
 {procdefs}""")
+
+    def lookup(self, name):
+        lookup = [p for p in self[Attr.PROCDEFS] if p[Attr.NAME] == name]
+        if lookup:
+            return lookup[0]
+        else:
+            raise KeyError(f"{name} not found in {self}")
