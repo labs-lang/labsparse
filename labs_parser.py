@@ -8,7 +8,7 @@ from pyparsing import (Combine, FollowedBy, Forward, Keyword, Literal,
 from pyparsing import pyparsing_common as ppc
 from pyparsing import pythonStyleComment, ungroup
 
-from labs_ast import Attr, Node, NodeType
+from .labs_ast import Attr, Node, NodeType
 
 ParserElement.enablePackrat()
 
