@@ -134,6 +134,21 @@ def maybe_list(iterable):
         return f"(list {' '.join(str(x) for x in iterable)})"
 
 
+class QueryResult:
+    def __init__(self, result):
+        self.result = result
+
+    def __iter__(self):
+        yield from self.result
+
+    def __call__(self, query):
+        yield from (x for x in self if x(*query))
+
+    def __floordiv__(self, query):
+        for result in self:
+            yield from (x for x in result.walk() if x(*query))
+
+
 class Node:
     __slots__ = Attr.PATH, Attr.LN, Attr.COL, Attr.SYNTHETIC
     AS_NODETYPE = None
@@ -235,6 +250,19 @@ class Node:
 
     def __repr__(self) -> str:
         return str(self.serialize())
+
+    def __call__(self, node_type, attrs):
+        if node_type != self.AS_NODETYPE:
+            return False
+        for attr, val in attrs.items():
+            if callable(val):
+                return val(self[attr])
+            elif self[attr] != val:
+                return False
+        return True
+
+    def __floordiv__(self, query):
+        return QueryResult(x for x in self.walk() if x(*query))
 
 
 class Agent(Node):
