@@ -61,13 +61,20 @@ def check(ast, filter_fn, body) -> List[Message]:
 
 def check_assign(ast: Node) -> List[Message]:
     """Checks related to assignment statements."""
-    def body(node, result):
-        for var in node[Attr.LHS]:
-            if var[Attr.NAME] == "id":
-                result.append(Message.from_node(
-                    message_id="E001",
-                    message="Cannot assign to 'id'",
-                    node=var))
+    result = []
+    assigns = list(ast // (NodeType.ASSIGN, ))
+    assign_to_id = (
+        x // (NodeType.REF, {Attr.NAME: "id"})
+        for asgn in assigns
+        for x in asgn[Attr.LHS]
+    )
+    result.extend(
+        Message.from_node(
+            message_id="E001",
+            message="Cannot assign to 'id'",
+            node=ref) 
+        for x in assign_to_id for ref in x)
+    for node in assigns:
         if len(node[Attr.LHS]) != len(node[Attr.RHS]):
             result.append(Message.from_node(
                 message_id="E002",
@@ -84,8 +91,7 @@ def check_assign(ast: Node) -> List[Message]:
                             f"Variable '{v1['name']}' "
                             "assigned multiple times"),
                         node=v2))
-
-    return check(ast, is_(Assign), body)
+    return result
 
 
 def check_ref(ast: Root) -> List[Message]:
@@ -102,39 +108,54 @@ def check_ref(ast: Root) -> List[Message]:
 
 def check_spawn(ast: Root) -> List[Message]:
     spawn = ast["system"][Attr.SPAWN]
-    if not spawn:
+    spawn_decls = list(ast // (NodeType.SPAWN_DECLARATION, ))
+    if not spawn or len(spawn_decls) == 0:
         return [Message.from_node(
             message_id="E005",
             message="Missing 'spawn' in 'system'",
             node=ast["system"]
         )]
-    # TODO try and check spawns that evaluate to 0
+    warnings = []
+    for x in spawn_decls:
+        try:
+            if const_eval(x[Attr.VALUE]) == 0:
+                warnings.append(Message.from_node(
+                    message_id="W002",
+                    message=f"Spawn of '{x[Attr.TYPE]}' evaluates to 0",
+                    node=x
+                ))
+        except ValueError:
+            continue
+    return warnings
 
 
 def check_externs(ast: dict) -> List[Message]:
     try:
-        defined_exts = {x[Attr.NAME]: x for x in ast["system"]["extern"]}
+        defined = {x[Attr.NAME]: x for x in ast["system"]["extern"]}
     except KeyError:
-        defined_exts = []
+        defined = []
 
-    uses = Counter()
+    ref_exts = ast // (NodeType.REF_EXT, )
+    ref_exts.persist()
+    
+    undefined_exts = ref_exts(None, {Attr.NAME: lambda x: x not in defined})
 
-    def body(n, result):
-        uses[n[Attr.NAME]] += 1
-        if n[Attr.NAME] not in defined_exts:
-            result.append(Message.from_node(
-                message_id="E006",
-                message=f"Undefined extern '{n[Attr.NAME]}'",
-                node=n))
+    result = [
+        Message.from_node(
+            message_id="E006",
+            message=f"Undefined extern '{n[Attr.NAME]}'",
+            node=n)
+        for n in undefined_exts]
+    uses = Counter(n[Attr.NAME] for n in ref_exts)
 
-    result = check(ast, is_(RefExt), body)
+    # result = check(ast, is_(RefExt), body)
     result.extend(
         Message.from_node(
             message_id="W001",
             message=f"Unused extern '{n}'",
-            node=defined_exts[n]
+            node=defined[n]
         )
-        for n in uses if n in defined_exts and uses[n] <= 1
+        for n in defined if uses[n] <= 1
     )
     return result
 
