@@ -1,16 +1,17 @@
 from enum import Enum, unique, auto
 from collections.abc import Iterable
+import textwrap as tw
 from typing import Any
 
-
+_BASE_INDENT =' ' * 2
 _NEWLINE = "\n"
 
 _SYNTAX = {
-    "choice": " ++\n",
+    "choice": "\n++\n",
     "environment": "<--",
     "interface": "<-",
     "local": ":=",
-    "par": " ||\n",
+    "par": "\n||\n",
     "stigmergy": "<~",
     "seq": ";\n",
     "unary-minus": "-",
@@ -299,17 +300,19 @@ class Agent(Node):
 
     def as_labs(self, indent=0) -> str:
         iface = ", ".join(x.as_labs() for x in self[Attr.INTERFACE])
-        iface = f"{' '*(indent+2)}interface = {iface}\n" if iface else ""
+        iface = f"interface = {iface}\n" if iface else ""
         stigs = ", ".join(self[Attr.STIGMERGIES])
-        stigs = f"{' '*(indent+2)}stigmergies = {stigs}\n" if stigs else ""
+        stigs = f"stigmergies = {stigs}\n" if stigs else ""
         procdefs = "\n".join(
-            x.as_labs(indent=indent+2) for x in self[Attr.PROCDEFS])
+            tw.indent(x.as_labs(), _BASE_INDENT) for x in self[Attr.PROCDEFS])
 
         return (
-            f"\n{' '*indent}agent {self[Attr.NAME]} {{\n"
-            f"{iface}{stigs}"
+            f"agent {self[Attr.NAME]} {{\n"
+            f"{tw.indent(iface, _BASE_INDENT)}"
+            f"{tw.indent(stigs, _BASE_INDENT)}"
+            "\n"
             f"{procdefs}"
-            f"\n{' '*indent}}}"
+            f"\n{tw.indent('}', _BASE_INDENT)}"
         )
 
     def as_msur(self) -> str:
@@ -521,8 +524,13 @@ class Composition(Node):
     AS_NODETYPE = NodeType.COMPOSITION
 
     def as_labs(self, indent=0) -> str:
-        return _SYNTAX[self[Attr.NAME]].join(
-            x.as_labs(indent=indent+2) for x in self[Attr.OPERANDS])
+        lpar, rpar = ("", "") if self[Attr.NAME] == "seq" else ("(", ")")
+        operands = [x.as_labs() for x in self[Attr.OPERANDS]]
+        if self[Attr.NAME] != "seq":
+            operands[0] = "(" + operands[0]
+            operands[-1] += ")"
+        operands = [tw.indent(x, _BASE_INDENT) for x in operands]
+        return _SYNTAX[self[Attr.NAME]].join(operands)
 
     def as_msur(self):
         items = " ".join(x.as_msur() for x in self[Attr.OPERANDS])
@@ -583,7 +591,8 @@ class Guarded(Node):
     AS_NODETYPE = NodeType.GUARDED
 
     def as_labs(self, indent=0) -> str:
-        return f"{self[Attr.CONDITION].as_labs()} ->\n  {self[Attr.BODY].as_labs(indent+2)}"  # noqa: E501
+        body = tw.indent(self[Attr.BODY].as_labs(), _BASE_INDENT)
+        return f"({self[Attr.CONDITION].as_labs()} ->\n{body})"  # noqa: E501
 
     def as_msur(self) -> str:
         return f"( #guard {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"  # noqa: E501
@@ -658,9 +667,8 @@ class ProcDef(Node):
 
     def as_labs(self, indent=0) -> str:
         return (
-            f"{' '*indent}{self[Attr.NAME]} "
-            "=\n"
-            f"{self[Attr.BODY].as_labs(indent)}")
+            f"{self[Attr.NAME]} =\n"
+            f"{tw.indent(self[Attr.BODY].as_labs(), _BASE_INDENT)}\n")
 
     def as_msur(self) -> str:
         return f"( #def {self[Attr.NAME]} {self[Attr.BODY].as_msur()} )"
@@ -800,7 +808,7 @@ class Root(Node):
         self.assume = assume
         self.check = check
 
-    def as_labs(self, _=0) -> str:
+    def as_labs(self) -> str:
         return (
 f"""{self["system"].as_labs()}
 {_NEWLINE.join(a.as_labs() for a in self["stigmergies"])}
