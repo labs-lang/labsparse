@@ -29,7 +29,7 @@ _SYNTAX_MSUR = {
 }
 
 # Needed for Masseur translation
-STIGMERGY_VARS = []
+_STIGMERGY_VARS = []
 
 
 class StringEnum(str, Enum):
@@ -354,7 +354,7 @@ class Assign(Node):
             n[Attr.NAME]
             for expr in self[Attr.RHS]
             for n in expr.walk()
-            if isinstance(n, Ref) and n[Attr.NAME] in STIGMERGY_VARS])
+            if isinstance(n, Ref) and n[Attr.NAME] in _STIGMERGY_VARS])
 
         result = ""
         lhs, rhs = self[Attr.LHS], self[Attr.RHS]
@@ -813,7 +813,7 @@ f"""{self["system"].as_labs()}
                 if isinstance(n, TupleDeclaration):
                     for var in n[Attr.VARIABLE]:
                         if var[Attr.NAME] not in replicated:
-                            STIGMERGY_VARS.append(var[Attr.NAME])
+                            _STIGMERGY_VARS.append(var[Attr.NAME])
                             replicated[var[Attr.NAME]] = var
         fmt_replicated = " ".join(x.as_msur() for x in replicated.values())
 
