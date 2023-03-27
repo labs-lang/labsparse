@@ -1,13 +1,13 @@
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
-from labs_parser import Attr, NodeType
 from pathlib import Path
 from typing import Any
 
 import pyparsing as pp
 
-from labs_ast import Node
+from .labs_parser import Attr
+from .labs_ast import Node
 
 
 class OutputFormat(Enum):

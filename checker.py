@@ -1,12 +1,15 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, wait
+from functools import reduce
+from inspect import signature
 from itertools import combinations
+import operator
 from typing import List
 
-from labs_ast import (Assign, Builtin, Expr, Node, Ref, RefExt, RefLink, Root,
-                      is_)
-from labs_parser import Attr, NodeType, kw
-from output import Message
+from .labs_ast import (Assign, Builtin, Expr, Node, Ref, RefExt, RefLink, Root,
+                       is_, NodeType)
+from .labs_parser import Attr, kw
+from .output import Message
 
 
 def check(ast, filter_fn, body) -> List[Message]:

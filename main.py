@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
 import pprint
-from optimizer import optimize
-from labs_parser import parse_to_dict
 from pathlib import Path
 from sys import stderr
 from typing import Optional
 
 import typer
-
-from checker import run
 from pyparsing import ParseBaseException
-from output import Message, OutputFormat, j_dump, print_many
+
+from .checker import run
+from .labs_parser import parse_to_dict
+from .optimizer import optimize
+from .output import Message, OutputFormat, j_dump, print_many
 
 
 def print_version(flag):

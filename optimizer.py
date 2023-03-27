@@ -2,12 +2,12 @@ import operator
 from functools import reduce
 from inspect import signature
 
-from labs_ast import (Attr, Builtin, Composition, Expr, Guarded, If, Literal,
-                      Node, ProcDef)
+from .labs_ast import (Attr, Builtin, Composition, Expr, Guarded, If, Literal,
+                       Node, ProcDef)
 
 
 def evaluate(node):
-    """Evaluate an expression node."""
+    """Evaluate an expression node. DESTRUCTIVE"""
     operators = {
         "+": operator.add,
         "-": operator.sub,

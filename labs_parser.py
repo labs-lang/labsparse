@@ -19,9 +19,8 @@ def oneOfKw(lst):
     return oneOf(lst, asKeyword=True)
 
 
-LBRACE, \
-    RBRACE, LBRACK, RBRACK, EQ, COLON,\
-    SEMICOLON, COMMA, LPAR, RPAR, RAWPREFIX = map(Suppress, "{}[]=:;,()$")
+LBRACE, RBRACE, LBRACK, RBRACK, EQ, COLON,\
+SEMICOLON, COMMA, LPAR, RPAR, RAWPREFIX = map(Suppress, "{}[]=:;,()$")
 
 kw = "and or not true false forall exists pick where if then else"
 BUILTIN = oneOfKw("abs mix max")
