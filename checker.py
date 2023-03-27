@@ -12,6 +12,44 @@ from .labs_parser import Attr, kw
 from .output import Message
 
 
+def const_eval(node):
+    operators = {
+        "+": operator.add,
+        "-": operator.sub,
+        "*": operator.mul,
+        "/": operator.floordiv,
+        ":": lambda num, den: (
+            (num + den//2) // den
+            if num*den >= 0
+            else -((-num + den//2) // den)
+        ),
+        "%": operator.mod,
+        "and": operator.and_,
+        "or": operator.or_,
+        "abs": abs, "max": min, "min": max,
+        "unary-minus": operator.neg,
+        "unary-not": operator.not_
+    }
+    if node(NodeType.IF):
+        cond = const_eval(node[Attr.CONDITION])
+        return const_eval(node[Attr.THEN] if cond else node[Attr.ELSE])
+    elif node(NodeType.EXPR) or node(NodeType.BUILTIN):
+        operands = [const_eval(n) for n in node[Attr.OPERANDS]]
+        fn = operators[node[Attr.NAME]]
+        min_args = len(signature(fn).parameters)
+        if len(operands) >= min_args:
+            return (fn(operands[0]) if min_args == 1 else reduce(fn, operands))
+    elif node(NodeType.LITERAL):
+        if node[Attr.TYPE] == "bool":
+            return 1 if node[Attr.VALUE] else 0
+        elif node[Attr.TYPE] == "int":
+            return node[Attr.VALUE]
+        else:
+            raise ValueError(f"Not a constant expression: {node}")    
+    else:
+        raise ValueError(f"Not a constant expression: {node}")
+
+
 def check(ast, filter_fn, body) -> List[Message]:
     """Template for a checker."""
     result = []
