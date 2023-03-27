@@ -61,6 +61,9 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
             toks[Attr.NAME] = ast_type
             toks[Attr.OPERANDS] = _t[ast_type]
             ast_type = NodeType.COMPOSITION
+        elif ast_type == "Skip":
+            toks[Attr.NAME] = ast_type
+            ast_type = NodeType.CALL
         elif ast_type in "+-*/%:" or ast_type in ("and", "or"):
             toks[Attr.NAME] = ast_type
             toks[Attr.OPERANDS] = toks[0][0::2]
@@ -108,6 +111,7 @@ def offset(pexpr):
 
 def baseVarRefParser(pexpr):
     return (
+        ~(oneOfKw(kw)) +
         VARNAME(Attr.NAME) +
         Optional(
             offset(pexpr)(Attr.OFFSET) ^
@@ -307,7 +311,7 @@ CHECK = (
     Keyword("check").suppress() + LBRACE +
     ZeroOrMore((
         IDENTIFIER(Attr.NAME) + EQ +
-        MODALITY(Attr.MODALITY) + ungroup(QUANT)(Attr.CONDITION)
+        MODALITY(Attr.MODALITY) + ungroup(BEXPR | QUANT)(Attr.CONDITION)
         )(NodeType.PROPERTY_DEF).setParseAction(make_node)
     )(Attr.PROPERTIES) +
     RBRACE

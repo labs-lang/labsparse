@@ -3,6 +3,7 @@
 import pprint
 from pathlib import Path
 from sys import stderr
+import sys
 from typing import Optional
 
 import typer
@@ -46,8 +47,9 @@ def main(
         ast = parse_to_dict(path)
         optimize(ast)
     except ParseBaseException as e:
-        print("[FATAL] parsing failed", file=stderr)
+        # print("[FATAL] parsing failed", file=stderr)
         messages = [Message.wrap_exception(e, path)]
+        print_many(messages, out=sys.stderr)
     else:
         if dump_ast:
             dump_fn = {

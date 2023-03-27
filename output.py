@@ -2,6 +2,7 @@ import json
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
+import sys
 from typing import Any
 
 import pyparsing as pp
@@ -93,10 +94,10 @@ def j_dump(x):
     return json.dumps(x, default=default, indent=4)
 
 
-def print_many(messages, fmt=OutputFormat.TEXT):
+def print_many(messages, fmt=OutputFormat.TEXT, out=sys.stdout):
 
     def json_fn():
-        print(j_dump([asdict(m) for m in messages]))
+        print(j_dump([asdict(m) for m in messages]), file=out)
 
     def text_fn():
         for m in messages:
