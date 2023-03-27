@@ -1,4 +1,5 @@
 from enum import Enum, unique, auto
+from collections.abc import Iterable
 from typing import Any
 
 
@@ -138,11 +139,14 @@ class QueryResult:
     def __init__(self, result):
         self.result = result
 
+    def persist(self):
+        self.result = list(self.result)
+
     def __iter__(self):
         yield from self.result
 
-    def __call__(self, query):
-        yield from (x for x in self if x(*query))
+    def __call__(self, node_type, attrs=None):
+        yield from (x for x in self if x(node_type, attrs))
 
     def __floordiv__(self, query):
         for result in self:
@@ -169,8 +173,6 @@ class Node:
             system[Attr.PATH], system[Attr.LN], system[Attr.COL],
             system, agents, stigmergies, assume, check)
 
-    def matches(self, node_type):
-        return self.AS_NODETYPE == node_type
 
     def lookup(self, _):
         raise NotImplementedError(f"Cannot lookup from node {self}")
@@ -188,16 +190,14 @@ class Node:
         yield self
         for attr in self.__slots__:
             if isinstance(self[attr], Node):
-                if do_not_visit:
-                    if any(self[attr].matches(x) for x in do_not_visit):
-                        continue
+                if do_not_visit is not None and self[attr](do_not_visit):
+                    continue
                 yield from self[attr].walk(do_not_visit)
             elif isinstance(self[attr], list):
                 for x in self[attr]:
                     if isinstance(x, Node):
-                        if do_not_visit:
-                            if any(x.matches(y) for y in do_not_visit):
-                                continue
+                        if do_not_visit is not None and x(do_not_visit):
+                            continue
                         yield from x.walk(do_not_visit)
 
     def __getitem__(self, key):
@@ -272,14 +272,21 @@ class Node:
     def __repr__(self) -> str:
         return str(self.serialize())
 
-    def __call__(self, node_type, attrs):
-        if node_type != self.AS_NODETYPE:
-            return False
-        for attr, val in attrs.items():
-            if callable(val):
-                return val(self[attr])
-            elif self[attr] != val:
+    def __call__(self,
+                 node_type: NodeType | Iterable[NodeType],
+                 attrs: None | dict[Attr, Any] = None) -> bool:
+        if isinstance(node_type, NodeType):
+            if node_type != self.AS_NODETYPE:
                 return False
+        elif isinstance(node_type, Iterable):
+            if all(x != self.AS_NODETYPE for x in node_type):
+                return False
+        if attrs is not None:
+            for attr, val in attrs.items():
+                if callable(val):
+                    return val(self[attr])
+                elif self[attr] != val:
+                    return False
         return True
 
     def __floordiv__(self, query):
