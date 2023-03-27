@@ -150,8 +150,10 @@ class QueryResult:
         yield from (x for x in self if x(node_type, attrs))
 
     def __floordiv__(self, query):
-        for result in self:
-            yield from (x for x in result.walk() if x(*query))
+        return QueryResult(x for x in self if x(*query))
+
+    def __mod__(self, attr):
+        return QueryResult(x for result in self for x in result[attr])
 
 
 class Node:
@@ -187,19 +189,20 @@ class Node:
         except KeyError:
             return None
 
-    def walk(self, do_not_visit=None):
-        yield self
-        for attr in self.__slots__:
+    def walk(self, ignore_types=None, ignore_attrs=tuple()):
+        if ignore_types is None or not self(ignore_types):
+            yield self
+        for attr in (x for x in self.__slots__ if x not in ignore_attrs):
             if isinstance(self[attr], Node):
-                if do_not_visit is not None and self[attr](do_not_visit):
+                if ignore_types is not None and self[attr](ignore_types):
                     continue
-                yield from self[attr].walk(do_not_visit)
+                yield from self[attr].walk(ignore_types, ignore_attrs)
             elif isinstance(self[attr], list):
                 for x in self[attr]:
                     if isinstance(x, Node):
-                        if do_not_visit is not None and x(do_not_visit):
+                        if ignore_types is not None and x(ignore_types):
                             continue
-                        yield from x.walk(do_not_visit)
+                        yield from x.walk(ignore_types, ignore_attrs)
 
     def __getitem__(self, key):
         return self._get(key)
