@@ -73,17 +73,19 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
             fn = {"int": int, "bool": bool}.get(toks[Attr.TYPE], lambda x: x)
             toks[Attr.VALUE] = fn(toks[ast_type])
             ast_type = NodeType.LITERAL
-        elif ast_type.startswith("init-"):
+        elif ast_type.startswith("init-") or ast_type.startswith("nondet-from"):  # noqa: E501
             toks[Attr.NAME] = ast_type.replace("init", "nondet-from")
             toks[Attr.OPERANDS] = {
                 "init-list": lambda t: t.asList(),
                 "init-range": lambda t: [t[0], t[1]],
-                "init-value": lambda t: t["init-value"]
+                "init-value": lambda t: t["init-value"],
+                "nondet-from-range": lambda t: [t["e1"], t["e2"]]
             }[ast_type](toks)
+
             ast_type = NodeType.BUILTIN
 
-        return (Node.factory(
-            _path, pp.lineno(loc, s), pp.col(loc, s), ast_type, toks))
+        return Node.factory(
+            _path, pp.lineno(loc, s), pp.col(loc, s), ast_type, toks)
     except KeyError:
         return toks
     ### For debugging:
@@ -142,19 +144,27 @@ def makeExprParsers(pvarrefMaker):
         + RPAR
     )
 
+    builtin_call = (
+        BUILTIN(Attr.NAME) + LPAR + 
+        Optional(delimitedList(expr))(Attr.OPERANDS) + RPAR
+    )
+
+    nondet_value = (
+        LBRACK + expr("e1") + Literal("..") + expr("e2") + RBRACK
+    ).setResultsName("nondet-from-range")
+
+
     expr_atom = (
         (
             Keyword("if").suppress() + bexpr(Attr.CONDITION) +
             Keyword("then").suppress() + expr(Attr.THEN) +
             Keyword("else").suppress() + expr(Attr.ELSE)
-        )(NodeType.IF).setParseAction(make_node) |
-        ppc.integer.setResultsName("literal-int").setParseAction(make_node) |
-        raw_fn_call(NodeType.RAW_CALL).setParseAction(make_node) |
-        (
-            BUILTIN(Attr.NAME) + LPAR +
-            Optional(delimitedList(expr)(Attr.OPERANDS)) + RPAR
-        )(NodeType.BUILTIN).setParseAction(make_node) |  # noqa: E501
-        var_ref.setParseAction(make_node) |
+        )(NodeType.IF).setParseAction(make_node) ^
+        ppc.integer.setResultsName("literal-int").setParseAction(make_node) ^
+        nondet_value("nondet-from-range").setParseAction(make_node) ^
+        raw_fn_call(NodeType.RAW_CALL).setParseAction(make_node) ^
+        builtin_call(NodeType.BUILTIN).setParseAction(make_node) ^
+        var_ref.setParseAction(make_node) ^
         EXTERN.setParseAction(make_node)
     )
 
