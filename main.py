@@ -49,7 +49,8 @@ def main(
     except ParseBaseException as e:
         # print("[FATAL] parsing failed", file=stderr)
         messages = [Message.wrap_exception(e, path)]
-        print_many(messages, out=sys.stderr)
+        if dump_ast:
+            print_many(messages, out=sys.stderr)
     else:
         if dump_ast:
             dump_fn = {
