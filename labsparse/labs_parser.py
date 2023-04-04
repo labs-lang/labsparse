@@ -74,7 +74,7 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
             toks[Attr.VALUE] = fn(toks[ast_type])
             ast_type = NodeType.LITERAL
         elif ast_type.startswith("init-") or ast_type.startswith("nondet-from"):  # noqa: E501
-            toks[Attr.NAME] = ast_type.replace("init", "nondet-from")
+            toks[Attr.NAME] = ast_type
             toks[Attr.OPERANDS] = {
                 "init-list": lambda t: t.asList(),
                 "init-range": lambda t: [t[0], t[1]],
@@ -108,7 +108,7 @@ def named_list(name, thing, sep=SEMICOLON):
 
 
 def offset(pexpr):
-    return LBRACK + pexpr + RBRACK
+    return LBRACK + delimitedList(pexpr) + RBRACK
 
 
 def baseVarRefParser(pexpr):

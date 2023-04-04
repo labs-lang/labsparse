@@ -3,7 +3,7 @@ from collections.abc import Iterable
 import textwrap as tw
 from typing import Any
 
-_BASE_INDENT =' ' * 2
+_BASE_INDENT = ' ' * 2
 _NEWLINE = "\n"
 
 _SYNTAX = {
@@ -224,6 +224,7 @@ class Node:
             Attr.EXTERN,
             Attr.INTERFACE,
             Attr.LHS,
+            Attr.OFFSET,
             Attr.OPERANDS,
             Attr.PROCDEFS,
             Attr.PROPERTIES,
@@ -450,8 +451,10 @@ class Builtin(Node):
 
     def as_labs(self, _=0) -> str:
         if self[Attr.NAME] == "nondet-from-range":
+            return f"[{self[Attr.OPERANDS][0].as_labs()}..{self[Attr.OPERANDS][1].as_labs()}]"  # noqa: E501
+        elif self[Attr.NAME] == "init-range":
             return f"{self[Attr.OPERANDS][0].as_labs()}..{self[Attr.OPERANDS][1].as_labs()}"  # noqa: E501
-        elif self[Attr.NAME] == "nondet-from-list":
+        elif self[Attr.NAME] == "init-list":
             return f'[{", ".join(x.as_labs() for x in self[Attr.OPERANDS])}]'
         else:
             fn = _SYNTAX.get(self[Attr.NAME], self[Attr.NAME])
@@ -459,9 +462,9 @@ class Builtin(Node):
             return f"{fn}({args})"
 
     def as_msur(self):
-        if self[Attr.NAME] == "nondet-from-range":
+        if self[Attr.NAME] in ("nondet-from-range", "init-range"):
             return f"( #range {self[Attr.OPERANDS][0].as_msur()} {self[Attr.OPERANDS][1].as_msur()})"  # noqa: E501
-        elif self[Attr.NAME] == "nondet-from-list":
+        elif self[Attr.NAME] == "init-list":
             return " ".join(x.as_msur() for x in self[Attr.OPERANDS])
         elif self[Attr.NAME] == "unary-minus":
             try:
@@ -738,15 +741,18 @@ class Ref(Node):
 
     def __init__(self, path, ln, col, toks) -> None:
         super().__init__(path, ln, col, toks)
-        for attr in (Attr.OF, Attr.OFFSET):
-            val = self._get(attr)
-            if val is not None:
-                self._set(attr, val[0])
+        # for attr in (Attr.OF, Attr.OFFSET):
+        get_of, get_offset = self._get(Attr.OF), self._get(Attr.OFFSET)
+        if get_offset is not None:
+            self._set(Attr.OFFSET, get_offset)
+        if get_of is not None:
+            self._set(Attr.OF, get_of[0])
 
     def as_labs(self, indent=0) -> str:
         result = self[Attr.NAME]
         if self[Attr.OFFSET]:
-            result += f"[{self[Attr.OFFSET].as_labs()}]"
+            off = ", ".join(x.as_labs() for x in self[Attr.OFFSET])
+            result += f"[{off}]"
         if self[Attr.OF]:
             result = f"({result} of {self[Attr.OF].as_labs()})"
         return result
@@ -754,7 +760,8 @@ class Ref(Node):
     def as_msur(self, indent=0) -> str:
         result = "#self" if self[Attr.NAME] == "id" else self[Attr.NAME]
         if self[Attr.OFFSET]:
-            result = f"( #array {result} {self[Attr.OFFSET].as_msur()})"
+            off = " ".join(x.as_labs() for x in self[Attr.OFFSET])
+            result = f"( #array {result} {off})"
         if self[Attr.OF]:
             result = f"( #var-of {result} {self[Attr.OF].as_msur()})"
         return result
@@ -789,7 +796,8 @@ class RefLink(Node):
     def as_labs(self, indent=0) -> str:
         result = self[Attr.NAME]
         if self[Attr.OFFSET]:
-            result += f"[{self[Attr.OFFSET].as_labs()}]"
+            off = ", ".join(x.as_labs() for x in self[Attr.OFFSET])
+            result += f"[{off}]"
         if self[Attr.OF]:
             of = self[Attr.OF].replace("c", "")
             result = f"({result} of {of})"
