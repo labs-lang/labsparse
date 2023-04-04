@@ -448,7 +448,7 @@ class Builtin(Node):
     __slots__ = Attr.NAME, Attr.OPERANDS
     AS_NODETYPE = NodeType.BUILTIN
 
-    def as_labs(self, indent=0) -> str:
+    def as_labs(self, _=0) -> str:
         if self[Attr.NAME] == "nondet-from-range":
             return f"{self[Attr.OPERANDS][0].as_labs()}..{self[Attr.OPERANDS][1].as_labs()}"  # noqa: E501
         elif self[Attr.NAME] == "nondet-from-list":
@@ -456,7 +456,7 @@ class Builtin(Node):
         else:
             fn = _SYNTAX.get(self[Attr.NAME], self[Attr.NAME])
             args = ", ".join(x.as_labs() for x in self[Attr.OPERANDS])
-            return f"{' '*indent}{fn}({args})"
+            return f"{fn}({args})"
 
     def as_msur(self):
         if self[Attr.NAME] == "nondet-from-range":
@@ -726,6 +726,10 @@ class RawCall(Node):
 
     def collect_variables(self):
         return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
+    
+    def as_labs(self, indent=0) -> str:
+        ops = (x.as_labs() for x in self[Attr.OPERANDS])
+        return f"${self[Attr.NAME]}({', '.join(ops)})"
 
 
 class Ref(Node):
