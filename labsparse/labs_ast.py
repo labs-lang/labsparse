@@ -189,6 +189,35 @@ class Node:
         except KeyError:
             return None
 
+    def __contains__(self, key):
+        return key in self.__slots__
+
+    def eq(self, other):
+        """ Structural equality """
+        # print(f"equality check: {self.as_labs()}, {other.as_labs()}")
+        if type(self) is not type(other):
+            return False
+        my_slots = set(self.__slots__)
+        my_slots -= {Attr.PATH, Attr.LN, Attr.COL, Attr.SYNTHETIC}
+        for attr in my_slots:
+            if isinstance(self[attr], Node):
+                if not self[attr].eq(other[attr]):
+                    return False
+            elif hasattr(self[attr], "__iter__") and not isinstance(self[attr], str):
+                try:
+                    for a, b in zip(self[attr], other[attr], strict=True):
+                        if isinstance(a, Node):
+                            if not a.eq(b):
+                                return False
+                        elif a != b:
+                            return False
+                except ValueError:
+                    # self[attr] was different length than other[attr]
+                    return False
+            elif self[attr] != other[attr]:
+                return False
+        return True
+                
     def walk(self, ignore_types=None, ignore_attrs=tuple()):
         if ignore_types is None or not self(ignore_types):
             yield self
