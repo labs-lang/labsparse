@@ -180,6 +180,12 @@ class Node:
             system[Attr.PATH], system[Attr.LN], system[Attr.COL],
             system, agents, stigmergies, assume, check)
 
+    @classmethod
+    def new(cls, node):
+        result = cls(node[Attr.PATH], node[Attr.LN], node[Attr.COL], {})
+        result[Attr.SYNTHETIC] = True
+        return result
+
     def lookup(self, _):
         raise NotImplementedError(f"Cannot lookup from node {self}")
 
@@ -686,6 +692,13 @@ class If(Node):
 class Literal(Node):
     __slots__ = Attr.TYPE, Attr.VALUE
     AS_NODETYPE = NodeType.LITERAL
+
+    @classmethod
+    def new(cls, node, typ, val):
+        n = super().new(node)
+        n[Attr.TYPE] = typ
+        n[Attr.VALUE] = val
+        return n
 
     def as_labs(self, indent=0) -> str:
         if self[Attr.TYPE] == "bool":
