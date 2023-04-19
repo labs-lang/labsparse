@@ -1,4 +1,5 @@
 import operator
+from copy import deepcopy
 from functools import reduce
 from inspect import signature
 
@@ -76,6 +77,41 @@ def simplify(proc):
         return proc
     else:
         return proc
+
+
+def simplify_expr(node):
+    def _simplify(node):
+        if not isinstance(node, Node):
+            return node
+        if Attr.OPERANDS in node:
+            node[Attr.OPERANDS] = [_simplify(n) for n in node[Attr.OPERANDS]]
+            if node[Attr.NAME] == "=" and all(node[Attr.OPERANDS][0].eq(x) for x in node[Attr.OPERANDS][1:]):  # noqa: E501
+                return Literal.new(node, "bool", True)
+            if (
+                node[Attr.NAME] == "=" and
+                all(isinstance(x, Literal) for x in node[Attr.OPERANDS]) and
+                any(not node[Attr.OPERANDS][0].eq(x) for x in node[Attr.OPERANDS][1:])  # noqa: E501
+            ):
+                return Literal.new(node, "bool", False)
+
+            if node[Attr.NAME] == "and":
+                if any(isinstance(x, Literal) and x[Attr.VALUE] is False for x in node[Attr.OPERANDS]):  # noqa: E501
+                    return Literal.new(node, "bool", False)
+                else:
+                    node[Attr.OPERANDS] = [x for x in node[Attr.OPERANDS] if Attr.VALUE not in x or x[Attr.VALUE] is not True]  # noqa: E501
+            if node[Attr.NAME] == "or":
+                if any(isinstance(x, Literal) and x[Attr.VALUE] is True for x in node[Attr.OPERANDS]):  # noqa: E501
+                    return Literal.new(node, "bool", True)
+                else:
+                    node[Attr.OPERANDS] = [x for x in node[Attr.OPERANDS] if Attr.VALUE not in x or x[Attr.VALUE] is not False]  # noqa: E501
+        return node
+
+    while True:
+        new_node = deepcopy(node)
+        _simplify(new_node)
+        if new_node.eq(node):
+            return new_node
+        node = new_node
 
 
 def fold_constants(ast: Node):
