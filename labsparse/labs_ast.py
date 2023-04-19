@@ -566,7 +566,9 @@ class Comparison(Node):
 
     def as_labs(self, indent=0) -> str:
         op = f" {self[Attr.NAME]} "
-        return op.join(x.as_labs() for x in self[Attr.OPERANDS])
+        return op.join(
+            x.as_labs() if isinstance(x, Node) else str(x)
+            for x in self[Attr.OPERANDS])
 
     def as_msur(self) -> str:
         op = _SYNTAX_MSUR.get(self[Attr.NAME], self[Attr.NAME])
@@ -632,7 +634,10 @@ class Expr(Node):
 
     def as_labs(self, indent=0) -> str:
         op = f" {self[Attr.NAME]} "
-        return op.join(x.as_labs() for x in self[Attr.OPERANDS])
+        return op.join(
+            f"({x.as_labs()})"
+            if isinstance(x, Node) else f"{x}"
+            for x in self[Attr.OPERANDS])
 
     def as_msur(self, indent=0) -> str:
         operands = " ".join(x.as_msur() for x in self[Attr.OPERANDS])
