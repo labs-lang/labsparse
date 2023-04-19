@@ -35,7 +35,7 @@ _STIGMERGY_VARS = []
 
 
 def _is_sequence(obj):
-    return isinstance(obj, Iterable) and not isinstance(obj, str)
+    return hasattr(obj, "__iter__") and not isinstance(obj, str)
 
 
 class StringEnum(str, Enum):
