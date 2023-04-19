@@ -34,6 +34,10 @@ _SYNTAX_MSUR = {
 _STIGMERGY_VARS = []
 
 
+def _is_sequence(obj):
+    return isinstance(obj, Iterable) and not isinstance(obj, str)
+
+
 class StringEnum(str, Enum):
     def _generate_next_value_(name, *_):
         return name.lower().replace("_", "-")
@@ -217,7 +221,19 @@ class Node:
             elif self[attr] != other[attr]:
                 return False
         return True
-                
+
+    def walk_with_handle(self):
+        for attr in (x for x in self.__slots__):
+            if isinstance(self[attr], Node):
+                yield (self[attr], self, attr, None)
+                yield from self[attr].walk_with_handle()
+            elif isinstance(self[attr], list):
+                for i, x in enumerate(self[attr]):
+                    if isinstance(x, Node):
+                        yield (x, self, attr, i)
+                        yield from x.walk_with_handle()
+
+
     def walk(self, ignore_types=None, ignore_attrs=tuple()):
         if ignore_types is None or not self(ignore_types):
             yield self
@@ -289,6 +305,14 @@ class Node:
             return f"\n{' '*(indent)}{wrapper}{{\n{things}\n{' '*(indent)}}}"
         else:
             return things
+
+    def set(self, attr, value, i=None):
+        if i is None:
+            self[attr] = value
+        elif _is_sequence(self[attr]):
+            self[attr][i] = value
+        else:
+            raise ValueError(f"cannot set {self}[{attr}][{i}]")
 
     def serialize(self) -> dict:
         def handle(value):
