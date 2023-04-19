@@ -180,7 +180,6 @@ class Node:
             system[Attr.PATH], system[Attr.LN], system[Attr.COL],
             system, agents, stigmergies, assume, check)
 
-
     def lookup(self, _):
         raise NotImplementedError(f"Cannot lookup from node {self}")
 
@@ -207,7 +206,7 @@ class Node:
             if isinstance(self[attr], Node):
                 if not self[attr].eq(other[attr]):
                     return False
-            elif hasattr(self[attr], "__iter__") and not isinstance(self[attr], str):
+            elif _is_sequence(self[attr]):
                 try:
                     for a, b in zip(self[attr], other[attr], strict=True):
                         if isinstance(a, Node):
@@ -232,7 +231,6 @@ class Node:
                     if isinstance(x, Node):
                         yield (x, self, attr, i)
                         yield from x.walk_with_handle()
-
 
     def walk(self, ignore_types=None, ignore_attrs=tuple()):
         if ignore_types is None or not self(ignore_types):
@@ -440,7 +438,7 @@ class Assign(Node):
 
         lhs = maybe_list([x.as_msur() for x in lhs])
         rhs = maybe_list([x.as_msur() for x in rhs])
-        return result + f"( {_SYNTAX_MSUR[self[Attr.TYPE]]} {lhs} {rhs} {stigmergy_refs} )"
+        return result + f"( {_SYNTAX_MSUR[self[Attr.TYPE]]} {lhs} {rhs} {stigmergy_refs} )"  # noqa: E501
 
     def collect_variables(self):
         return (
@@ -782,7 +780,7 @@ class RawCall(Node):
 
     def collect_variables(self):
         return set.union(x.collect_variables() for x in self[Attr.OPERANDS])
-    
+
     def as_labs(self, indent=0) -> str:
         ops = (x.as_labs() for x in self[Attr.OPERANDS])
         return f"${self[Attr.NAME]}({', '.join(ops)})"
@@ -889,11 +887,11 @@ f"""{self["system"].as_labs()}
 
         for agent in self["agents"]:
             for n in agent.walk():
-                if isinstance(n, Declaration) and n[Attr.VARIABLE][Attr.NAME] not in replicated:  # noqa: E501
-                    replicated[n[Attr.VARIABLE][Attr.NAME]] = (n[Attr.VARIABLE])
+                if n(NodeType.DECLARATION) and n[Attr.VARIABLE][Attr.NAME] not in replicated:  # noqa: E501
+                    replicated[n[Attr.VARIABLE][Attr.NAME]] = (n[Attr.VARIABLE])  # noqa: E501
         for stigmergy in self["stigmergies"]:
             for n in stigmergy.walk():
-                if isinstance(n, TupleDeclaration):
+                if n(NodeType.TUPLE_DECL):
                     for var in n[Attr.VARIABLE]:
                         if var[Attr.NAME] not in replicated:
                             _STIGMERGY_VARS.append(var[Attr.NAME])

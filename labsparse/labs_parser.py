@@ -19,8 +19,8 @@ def oneOfKw(lst):
     return oneOf(lst, asKeyword=True)
 
 
-LBRACE, RBRACE, LBRACK, RBRACK, EQ, COLON,\
-SEMICOLON, COMMA, LPAR, RPAR, RAWPREFIX = map(Suppress, "{}[]=:;,()$")
+LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR = map(Suppress, "{}[]()")
+EQ, COLON, SEMICOLON, COMMA, RAWPREFIX = map(Suppress, "=:;,$")
 
 kw = "and or not true false forall exists pick where if then else"
 BUILTIN = oneOfKw("abs min max")
@@ -88,7 +88,7 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
             _path, pp.lineno(loc, s), pp.col(loc, s), ast_type, toks)
     except KeyError:
         return toks
-    ### For debugging:
+    # # For debugging:
     # except Exception as e:
     #     print(type(e), e, pp.lineno(loc, s), pp.col(loc, s))
     #     return toks
@@ -145,14 +145,13 @@ def makeExprParsers(pvarrefMaker):
     )
 
     builtin_call = (
-        BUILTIN(Attr.NAME) + LPAR + 
+        BUILTIN(Attr.NAME) + LPAR +
         Optional(delimitedList(expr))(Attr.OPERANDS) + RPAR
     )
 
     nondet_value = (
         LBRACK + expr("e1") + Literal("..") + expr("e2") + RBRACK
     ).setResultsName("nondet-from-range")
-
 
     expr_atom = (
         (

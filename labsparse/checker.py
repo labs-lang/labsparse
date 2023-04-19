@@ -6,7 +6,7 @@ from itertools import combinations
 import operator
 from typing import List
 
-from .labs_ast import (Assign, Builtin, Expr, Node, Ref, RefExt, RefLink, Root,
+from .labs_ast import (Builtin, Expr, Node, Ref, RefExt, RefLink, Root,
                        is_, NodeType)
 from .labs_parser import Attr, kw
 from .output import Message
@@ -45,7 +45,7 @@ def const_eval(node):
         elif node[Attr.TYPE] == "int":
             return node[Attr.VALUE]
         else:
-            raise ValueError(f"Not a constant expression: {node}")    
+            raise ValueError(f"Not a constant expression: {node}")
     else:
         raise ValueError(f"Not a constant expression: {node}")
 
@@ -72,7 +72,7 @@ def check_assign(ast: Node) -> List[Message]:
         Message.from_node(
             message_id="E001",
             message="Cannot assign to 'id'",
-            node=ref) 
+            node=ref)
         for x in assign_to_id for ref in x)
     for node in assigns:
         if len(node[Attr.LHS]) != len(node[Attr.RHS]):
@@ -80,7 +80,8 @@ def check_assign(ast: Node) -> List[Message]:
                 message_id="E002",
                 message=(
                     "Invalid number of expressions "
-                    f'(expected {len(node[Attr.LHS])}, got {len(node[Attr.RHS])})'),
+                    f"(expected {len(node[Attr.LHS])}, "
+                    f"got {len(node[Attr.RHS])})"),
                 node=node))
         if len(node[Attr.LHS]) > 1:
             for v1, v2 in combinations(node[Attr.LHS], 2):
@@ -137,7 +138,7 @@ def check_externs(ast: dict) -> List[Message]:
 
     ref_exts = ast // (NodeType.REF_EXT, )
     ref_exts.persist()
-    
+
     undefined_exts = ref_exts(None, {Attr.NAME: lambda x: x not in defined})
 
     result = [
