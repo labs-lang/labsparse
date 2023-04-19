@@ -316,13 +316,14 @@ ASSUME = (
     RBRACE
 ).setParseAction(make_node)
 
+PROPERTY = (
+    IDENTIFIER(Attr.NAME) + EQ +
+    MODALITY(Attr.MODALITY) + ungroup(BEXPR | QUANT)(Attr.CONDITION)
+)(NodeType.PROPERTY_DEF).setParseAction(make_node)
+
 CHECK = (
     Keyword("check").suppress() + LBRACE +
-    ZeroOrMore((
-        IDENTIFIER(Attr.NAME) + EQ +
-        MODALITY(Attr.MODALITY) + ungroup(BEXPR | QUANT)(Attr.CONDITION)
-        )(NodeType.PROPERTY_DEF).setParseAction(make_node)
-    )(Attr.PROPERTIES) +
+    ZeroOrMore(PROPERTY)(Attr.PROPERTIES) +
     RBRACE
 ).setParseAction(make_node)
 
