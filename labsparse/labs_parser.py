@@ -311,7 +311,7 @@ ASSUME = (
     Keyword("assume").suppress() + LBRACE +
     # SkipTo(RBRACE) +
     ZeroOrMore((
-        IDENTIFIER(Attr.NAME) + EQ + ungroup(QUANT)(Attr.CONDITION)
+        IDENTIFIER(Attr.NAME) + EQ + ungroup(BEXPR | QUANT)(Attr.CONDITION)
     )(NodeType.PROPERTY_DEF).setParseAction(make_node))(Attr.PROPERTIES) +
     RBRACE
 ).setParseAction(make_node)
