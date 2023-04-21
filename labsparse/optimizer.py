@@ -72,7 +72,7 @@ def simplify(proc):
                 for p in proc[Attr.OPERANDS]
             ]
             return proc
-    elif isinstance(proc, Guarded):
+    elif Attr.BODY in proc and isinstance(proc[Attr.BODY], Node):
         proc[Attr.BODY] = simplify(proc[Attr.BODY])
         return proc
     else:

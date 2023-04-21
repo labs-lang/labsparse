@@ -20,7 +20,9 @@ def oneOfKw(lst):
 
 
 LBRACE, RBRACE, LBRACK, RBRACK, LPAR, RPAR = map(Suppress, "{}[]()")
-EQ, COLON, SEMICOLON, COMMA, RAWPREFIX = map(Suppress, "=:;,$")
+COLON, SEMICOLON, COMMA, RAWPREFIX = map(Suppress, ":;,$")
+EQ = ~Literal("=>") + Suppress("=")
+EQ_literal = ~Literal("=>") + Literal("=")
 
 kw = "and or not true false forall exists pick where if then else"
 BUILTIN = oneOfKw("abs min max")
@@ -73,6 +75,8 @@ def make_node(s: str, loc: int, toks: pp.ParseResults):
             fn = {"int": int, "bool": bool}.get(toks[Attr.TYPE], lambda x: x)
             toks[Attr.VALUE] = fn(toks[ast_type])
             ast_type = NodeType.LITERAL
+        elif ast_type == NodeType.GUARDED:
+            ast_type = NodeType.GUARDED if "GUARD" in toks else NodeType.CONDITIONAL  # noqa: E501
         elif ast_type.startswith("init-") or ast_type.startswith("nondet-from"):  # noqa: E501
             toks[Attr.NAME] = ast_type
             toks[Attr.OPERANDS] = {
@@ -176,7 +180,7 @@ def makeExprParsers(pvarrefMaker):
         ("+", 2, opAssoc.LEFT, make_node),
         ("-", 2, opAssoc.LEFT, make_node)])
 
-    bop = oneOf('!= = <= >= >') | (~Literal("<-") + Literal("<"))
+    bop = EQ_literal | (~Literal("<-") + Literal("<")) | oneOf('!= <= >= >')
 
     bexpr_atom = (
         oneOfKw("true false")("literal-bool") |
@@ -246,8 +250,9 @@ ASSIGN = ungroup((
 
 PROC = Forward()
 PROCBASE = ((
-    FollowedBy(BEXPR) + BEXPR(Attr.CONDITION) + Suppress("->") +
-    PROC(Attr.BODY))(NodeType.GUARDED) |
+    FollowedBy(BEXPR) + BEXPR(Attr.CONDITION) +
+    (Literal("->")("GUARD") | Literal("=>")("CONDITIONAL")) +
+    PROC(Attr.BODY))(NodeType.GUARDED) ^
     Keyword("Skip")("Skip") |
     IDENTIFIER(NodeType.CALL) |
     ASSIGN |

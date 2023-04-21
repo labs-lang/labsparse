@@ -96,6 +96,7 @@ class NodeType(StringEnum):
     BUILTIN = auto()
     CALL = auto()
     CHECK = auto()
+    CONDITIONAL = auto()
     COMPARISON = auto()
     COMPOSITION = auto()
     DECLARATION = auto()
@@ -664,6 +665,21 @@ class Guarded(Node):
 
     def as_msur(self) -> str:
         return f"( #guard {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"  # noqa: E501
+
+    def collect_variables(self):
+        return set.union(self[x].collect_variables() for x in self.__slots__)
+
+
+class Conditional(Node):
+    __slots__ = (Attr.CONDITION, Attr.BODY)
+    AS_NODETYPE = NodeType.CONDITIONAL
+
+    def as_labs(self, indent=0) -> str:
+        body = tw.indent(self[Attr.BODY].as_labs(), _BASE_INDENT)
+        return f"({self[Attr.CONDITION].as_labs()} =>\n{body})"  # noqa: E501
+
+    def as_msur(self) -> str:
+        return f"( #if {self[Attr.CONDITION].as_msur()} {self[Attr.BODY].as_msur()})"  # noqa: E501
 
     def collect_variables(self):
         return set.union(self[x].collect_variables() for x in self.__slots__)
