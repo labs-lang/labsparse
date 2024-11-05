@@ -180,7 +180,7 @@ def makeExprParsers(pvarrefMaker):
         ("+", 2, opAssoc.LEFT, make_node),
         ("-", 2, opAssoc.LEFT, make_node)])
 
-    bop = EQ_literal | (~Literal("<-") + Literal("<")) | oneOf('!= <= >= >')
+    bop = EQ_literal | (~Literal("<-") + oneOf("<= <")) | oneOf('!= <= >= >')
 
     bexpr_atom = (
         oneOfKw("true false")("literal-bool") |
